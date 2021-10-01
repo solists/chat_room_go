@@ -3,20 +3,22 @@
     <head>
         <meta charset="utf-8" />
 
-        <title>Tuts+ Chat Application</title>
-        <meta name="description" content="Tuts+ Chat Application" />
+        <title>Main page</title>
+        <meta name="description" content="Chat Application main page" />
         <link rel="stylesheet" href="/views/style.css" />
     </head>
     <body>
     
         <div id="wrapper">
             <div id="menu">
-                <p class="welcome">Welcome, <b>{{.}}</b></p>
+                <p class="welcome">Welcome</p>
                 <p class="logout"><a id="exit" href="#">Exit Chat</a></p>
             </div>
 
             <div id="chatbox">
-            {{template "chatroom"}}
+                {{range .}}
+                    <div class='msgln'><span class='chat-time'>{{.Time}}</span> <b class='user-name'>{{.Name}}</b>{{.Value}}<br></div>
+                {{end}}
             </div>
 
             <form name="message" action="" method="post">
@@ -42,11 +44,9 @@
             function loadLog(){		
             	var oldscrollHeight = $("#chatbox")[0].scrollHeight - 20; //Scroll height before the request
             	$.ajax({
-            		url: "/views/log.gohtml",
+            		url: "/views/message.gohtml",
             		cache: false,
             		success: function(html){
-                        // Remove temlate define trash, TODO: must be refactured
-                        html = html.slice(22, -7);
             			$("#chatbox").html(html); //Insert chat log into the #chatbox div	
 
             			//Auto-scroll			

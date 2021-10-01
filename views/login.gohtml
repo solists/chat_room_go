@@ -10,13 +10,17 @@
     <body>
         <div id="wrapper">
 			<div id="loginform">
-				<p>Please enter your name to continue! <b> {{.}}</b></p>
+				<p>Please enter your name to continue!</p>
 				<form method="post">
 					<label for="name">Name &mdash;</label>
 					<input type="text" name="username" id="uname" placeholder="email"/>
+					<input type="text" name="password" id="upass" placeholder="password"/>
 					<input type="submit" name="enter" id="enter" value="Enter" />
 				</form>
 			</div>
+            <div id="loginform">
+                <h2><a href="/signup">sign up</a></h2>
+            </div>
         </div>
     </body>
 </html>
