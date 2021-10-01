@@ -1,2 +1,8 @@
 # chat_room_go
  Simple implementation of chat website written in Golang
+
+# V01
+Naive realization of chat program.
+Alongside the used global structures and unscalable architecture it do consist some other bugs:
+Race condition (handle funcs are concurrent, structures are indeed global), questionable way of rendering frontend (gets data from static http file)
+There is no auth in main handler frontend, so if session expires it continues to receive updates (even will be able to push message once)

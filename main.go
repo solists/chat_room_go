@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TODO: remove race condition
 var tpl *template.Template
 var dbUsers map[string]user
 var dbSessions map[string]session
