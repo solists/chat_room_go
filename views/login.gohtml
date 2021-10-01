@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+
+        <title>Chat application</title>
+        <meta name="description" content="Login page for chat" />
+        <link rel="stylesheet" href="/views/style.css" />
+    </head>
+    <body>
+        <div id="wrapper">
+			<div id="loginform">
+				<p>Please enter your name to continue! <b> {{.}}</b></p>
+				<form method="post">
+					<label for="name">Name &mdash;</label>
+					<input type="text" name="username" id="uname" placeholder="email"/>
+					<input type="submit" name="enter" id="enter" value="Enter" />
+				</form>
+			</div>
+        </div>
+    </body>
+</html>
