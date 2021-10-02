@@ -5,4 +5,8 @@
 Naive realization of chat program.
 Alongside the used global structures and unscalable architecture it do consist some other bugs:
 Race condition (handle funcs are concurrent, structures are indeed global), questionable way of rendering frontend (gets data from static http file)
-There is no auth in main handler frontend, so if session expires it continues to receive updates (even will be able to push message once)
+There is no auth in main handler frontend, so if session expires it continues to receive updates (even will be able to push message once) 5h
+
+#V02
+Structures are the same, so the problems. Significanly refactured frontend logic. Changed some backend logic. 4h
+

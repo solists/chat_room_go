@@ -4,15 +4,15 @@
   }
   
   body {
-    margin: 20px auto;
     font-family: "Lato";
     font-weight: 300;
+    background-color: #f8fcff;
   }
   
   form {
-    padding: 15px 25px;
+    padding-right: 25px;
+    padding-left: 25px;
     display: flex;
-    gap: 10px;
     justify-content: center;
   }
   
@@ -35,13 +35,15 @@
   }
   
   #wrapper {
+    display: flex;
+    flex-flow: column;
     margin: 0 auto;
-    padding-bottom: 25px;
     background: #eee;
     width: 600px;
+    height: 95vh;
     max-width: 100%;
-    border: 2px solid #212121;
-    border-radius: 6px;
+    max-height: 100%;
+    border: 1px solid rgb(212, 237, 241)
   }
   
   #loginform {
@@ -59,23 +61,37 @@
   }
   
   #chatbox {
+    flex: 1 1 auto;
     text-align: left;
     margin: 0 auto;
-    margin-bottom: 25px;
+    padding-right: 0px;
+    padding-left: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
     padding: 10px;
     background: #fff;
-    height: 300px;
-    width: 530px;
-    border: 1px solid #a7a7a7;
     overflow: auto;
-    border-radius: 4px;
-    border-bottom: 4px solid #a7a7a7;
+  }
+  #chatcontroller {
+    padding-right: 15px;
+    padding-left: 15px;
+    padding-bottom: 10px;
+    padding-top: 10px;
+    background: rgb(212, 237, 241);
+    display: flex;
+    justify-content: center;
+  }
+
+  #messages li small { 
+    display: block;
+    font-size: 0.59em;
+    color: gray; 
   }
   
-  #usermsg {
+  #usermsgbox {
     flex: 1;
-    border-radius: 4px;
-    border: 1px solid #ff9800;
+    height: 25px;
+    border: 1px solid #75b8df;
   }
   
   #name {
@@ -86,12 +102,11 @@
   
   #submitmsg,
   #enter{
-    background: #ff9800;
+    background: #6ecbdb;
     border: 2px solid #e65100;
     color: white;
     padding: 4px 10px;
     font-weight: bold;
-    border-radius: 4px;
   }
   
   .error {
@@ -101,6 +116,7 @@
   #menu {
     padding: 15px 25px;
     display: flex;
+    background-color: rgb(212, 237, 241);
   }
   
   #menu p.welcome {
