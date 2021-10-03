@@ -7,6 +7,6 @@ Alongside the used global structures and unscalable architecture it do consist s
 Race condition (handle funcs are concurrent, structures are indeed global), questionable way of rendering frontend (gets data from static http file)
 There is no auth in main handler frontend, so if session expires it continues to receive updates (even will be able to push message once) 5h
 
-#V02
+# V02
 Structures are the same, so the problems. Significanly refactured frontend logic. Changed some backend logic. 4h
 

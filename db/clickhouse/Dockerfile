@@ -76,6 +76,8 @@ RUN groupadd -r clickhouse --gid=101 \
     && apt-get clean \
     && mkdir -p /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server /etc/clickhouse-client \
     && chmod ugo+Xrw -R /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server /etc/clickhouse-client
+	&& apt install curl
+	&& apt-get install xz-utils
 
 # we need to allow "others" access to clickhouse folder, because docker container
 # can be started with arbitrary uid (openshift usecase)

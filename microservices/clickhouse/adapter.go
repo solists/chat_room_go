@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	connect, err := sqlx.Open("clickhouse", "tcp://127.0.0.1:9000?debug=true")
+	connect, err := sqlx.Open("clickhouse", "tcp://127.0.0.1:19000?debug=true")
 	if err != nil {
 		log.Fatal(err)
 	}
