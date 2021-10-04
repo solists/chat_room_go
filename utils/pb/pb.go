@@ -1,7 +1,9 @@
-package main
+package hello
 
 import (
 	context "context"
+
+	//_ "chat_room_go/utils/pb"
 
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"

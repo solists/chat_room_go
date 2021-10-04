@@ -6,6 +6,7 @@ syntax = "proto3";
 //option java_outer_classname = "HelloWorldProto";
 
 package hello;
+option go_package = "/hello";
 
 // The greeting service definition.
 service Greeter {

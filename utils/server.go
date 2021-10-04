@@ -1,7 +1,7 @@
 package main
 
 import (
-	pb "chat_room_go/utils"
+	pb "chat_room_go/utils/pb"
 	"context"
 	"log"
 	"net"

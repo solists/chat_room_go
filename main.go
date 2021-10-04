@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	pb "chat_room_go/utils/pb"
 
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 // TODO: remove race condition
@@ -54,6 +59,11 @@ type session struct {
 	lastActive time.Time
 }
 
+const (
+	address     = "localhost:50051"
+	defaultName = "world"
+)
+
 func main() {
 	// http.HandleFunc("/login", loginHandle)
 	// http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
@@ -77,6 +87,27 @@ func main() {
 		"backoff", time.Second,
 	)
 	sugar.Infof("Failed to fetch URL: %s", url)
+
+	// Set up a connection to the server.
+	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	c := pb.NewGreeterClient(conn)
+
+	// Contact the server and print out its response.
+	name := defaultName
+	if len(os.Args) > 1 {
+		name = os.Args[1]
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Greeting: %s", r.GetMessage())
 }
 
 func signupHandle(w http.ResponseWriter, r *http.Request) {
