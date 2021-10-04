@@ -9,6 +9,7 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -54,16 +55,28 @@ type session struct {
 }
 
 func main() {
-	http.HandleFunc("/login", loginHandle)
-	http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
-	http.HandleFunc("/main", mainHandle)
-	http.HandleFunc("/signup", signupHandle)
-	http.HandleFunc("/messages", getMessagesHandle)
+	// http.HandleFunc("/login", loginHandle)
+	// http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
+	// http.HandleFunc("/main", mainHandle)
+	// http.HandleFunc("/signup", signupHandle)
+	// http.HandleFunc("/messages", getMessagesHandle)
 
-	http.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
-	http.Handle("/favicon.ico", http.NotFoundHandler())
+	// http.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
+	// http.Handle("/favicon.ico", http.NotFoundHandler())
 
-	http.ListenAndServe("localhost:8080", nil)
+	// http.ListenAndServe("localhost:8080", nil)
+
+	url := "tt"
+	logger, _ := zap.NewProduction()
+	defer logger.Sync() // flushes buffer, if any
+	sugar := logger.Sugar()
+	sugar.Infow("failed to fetch URL",
+		// Structured context as loosely typed key-value pairs.
+		"url", url,
+		"attempt", 3,
+		"backoff", time.Second,
+	)
+	sugar.Infof("Failed to fetch URL: %s", url)
 }
 
 func signupHandle(w http.ResponseWriter, r *http.Request) {
