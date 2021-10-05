@@ -3,13 +3,49 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"sync"
 	"time"
+
+	logs "chat_room_go/utils/logs"
 
 	"github.com/ClickHouse/clickhouse-go"
 	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 )
 
-func main() {
+var logger *zap.SugaredLogger
+
+func init() {
+	logger = logs.InitLogger("./logs/clickhouseWriter.json")
+}
+
+// func main() {
+// 	defer logger.Sync()
+// 	wg := &sync.WaitGroup{}
+// 	wg.Add(1000)
+// 	for i := 0; i < 500; i++ {
+// 		go simpleHttpGet("www.google.com", wg)
+// 		go simpleHttpGet("http://www.google.com", wg)
+// 	}
+
+// 	wg.Wait()
+// 	fmt.Println("All is done!")
+// }
+
+func simpleHttpGet(url string, wg *sync.WaitGroup) {
+	logger.Debugf("Trying to hit GET request for %s", url)
+	resp, err := http.Get(url)
+	if err != nil {
+		logger.Errorf("Error fetching URL %s : Error = %s", url, err)
+	} else {
+		logger.Infof("Success! statusCode = %s for URL %s", resp.Status, url)
+		resp.Body.Close()
+	}
+	wg.Done()
+}
+
+func clickhouseHandler() {
 	connect, err := sqlx.Open("clickhouse", "tcp://127.0.0.1:19000?debug=true")
 	if err != nil {
 		log.Fatal(err)

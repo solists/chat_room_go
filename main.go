@@ -1,21 +1,19 @@
 package main
 
 import (
+	grpcconnector "chat_room_go/microservices/clickhouse/pb"
 	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
-	pb "chat_room_go/utils/pb"
-
 	uuid "github.com/satori/go.uuid"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // TODO: remove race condition
@@ -64,6 +62,20 @@ const (
 	defaultName = "world"
 )
 
+type tokenAuth struct {
+	Token string
+}
+
+func (t *tokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{
+		"authorization": t.Token,
+	}, nil
+}
+
+func (c *tokenAuth) RequireTransportSecurity() bool {
+	return false
+}
+
 func main() {
 	// http.HandleFunc("/login", loginHandle)
 	// http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
@@ -76,38 +88,77 @@ func main() {
 
 	// http.ListenAndServe("localhost:8080", nil)
 
-	url := "tt"
-	logger, _ := zap.NewProduction()
-	defer logger.Sync() // flushes buffer, if any
-	sugar := logger.Sugar()
-	sugar.Infow("failed to fetch URL",
-		// Structured context as loosely typed key-value pairs.
-		"url", url,
-		"attempt", 3,
-		"backoff", time.Second,
+	// url := "tt"
+	// logger, _ := zap.NewProduction()
+	// defer logger.Sync() // flushes buffer, if any
+	// sugar := logger.Sugar()
+	// sugar.Infow("failed to fetch URL",
+	// 	// Structured context as loosely typed key-value pairs.
+	// 	"url", url,
+	// 	"attempt", 3,
+	// 	"backoff", time.Second,
+	// )
+	// sugar.Infof("Failed to fetch URL: %s", url)
+
+	// // Set up a connection to the server.
+	// conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+	// if err != nil {
+	// 	log.Fatalf("did not connect: %v", err)
+	// }
+	// defer conn.Close()
+	// c := pb.NewGreeterClient(conn)
+
+	// // Contact the server and print out its response.
+	// name := defaultName
+	// if len(os.Args) > 1 {
+	// 	name = os.Args[1]
+	// }
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// defer cancel()
+	// r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
+	// if err != nil {
+	// 	log.Fatalf("could not greet: %v", err)
+	// }
+	// log.Printf("Greeting: %s", r.GetMessage())
+
+	grcpConn, err := grpc.Dial(
+		"127.0.0.1:8081",
+		//grpc.WithUnaryInterceptor(timingInterceptor),
+		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		grpc.WithInsecure(),
 	)
-	sugar.Infof("Failed to fetch URL: %s", url)
-
-	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("cant connect to grpc")
 	}
-	defer conn.Close()
-	c := pb.NewGreeterClient(conn)
+	defer grcpConn.Close()
 
-	// Contact the server and print out its response.
-	name := defaultName
-	if len(os.Args) > 1 {
-		name = os.Args[1]
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
+	rpcwriter := grpcconnector.NewWriterClient(grcpConn)
+
+	ctx := context.Background()
+	md := metadata.Pairs(
+		"api-req-id", "123",
+		"subsystem", "cli",
+	)
+	sHeader := metadata.Pairs("authorization", "val")
+	grpc.SendHeader(ctx, sHeader)
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// ----------------------------------------------------
+
+	var header, trailer metadata.MD
+
+	resp, err := rpcwriter.Write(
+		ctx,
+		&grpcconnector.WriteRequest{Log: "Hello, world!"},
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+	)
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Panicln(err)
 	}
-	log.Printf("Greeting: %s", r.GetMessage())
+	fmt.Println("HERE IS RESPONSE IN CLIENT")
+	fmt.Println(resp)
+	//fmt.Println(resp.Desription)
 }
 
 func signupHandle(w http.ResponseWriter, r *http.Request) {
