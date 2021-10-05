@@ -1,23 +1,16 @@
 package main
 
 import (
-	grpcconnector "chat_room_go/microservices/clickhouse/pb"
-	"context"
-	"crypto/tls"
-	"crypto/x509"
+	"chat_room_go/utils/logs"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
 )
 
 // TODO: remove race condition
@@ -66,20 +59,6 @@ const (
 	defaultName = "world"
 )
 
-type tokenAuth struct {
-	Token string
-}
-
-func (t *tokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"authorization": t.Token,
-	}, nil
-}
-
-func (c *tokenAuth) RequireTransportSecurity() bool {
-	return false
-}
-
 func main() {
 	// http.HandleFunc("/login", loginHandle)
 	// http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
@@ -92,111 +71,12 @@ func main() {
 
 	// http.ListenAndServe("localhost:8080", nil)
 
-	// url := "tt"
-	// logger, _ := zap.NewProduction()
-	// defer logger.Sync() // flushes buffer, if any
-	// sugar := logger.Sugar()
-	// sugar.Infow("failed to fetch URL",
-	// 	// Structured context as loosely typed key-value pairs.
-	// 	"url", url,
-	// 	"attempt", 3,
-	// 	"backoff", time.Second,
-	// )
-	// sugar.Infof("Failed to fetch URL: %s", url)
-
-	// // Set up a connection to the server.
-	// conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
-	// if err != nil {
-	// 	log.Fatalf("did not connect: %v", err)
-	// }
-	// defer conn.Close()
-	// c := pb.NewGreeterClient(conn)
-
-	// // Contact the server and print out its response.
-	// name := defaultName
-	// if len(os.Args) > 1 {
-	// 	name = os.Args[1]
-	// }
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	// defer cancel()
-	// r, err := c.SayHello(ctx, &pb.HelloRequest{Name: name})
-	// if err != nil {
-	// 	log.Fatalf("could not greet: %v", err)
-	// }
-	// log.Printf("Greeting: %s", r.GetMessage())
-	creds, err := loadTLSCredentials()
-	if err != nil {
-		log.Panicln(err)
-	}
-
-	grcpConn, err := grpc.Dial(
-		"127.0.0.1:8081",
-		//grpc.WithUnaryInterceptor(timingInterceptor),
-		//grpc.WithTransportCredentials(credentials.NewTLS(config)),
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
-		grpc.WithTransportCredentials(creds),
-		//grpc.WithInsecure(),
-	)
-	if err != nil {
-		log.Fatalf("cant connect to grpc")
-	}
-	defer grcpConn.Close()
-
-	rpcwriter := grpcconnector.NewWriterClient(grcpConn)
-
-	ctx := context.Background()
-	md := metadata.Pairs(
-		"api-req-id", "123qwe",
-		"subsystem", "chat_room_main",
-	)
-	sHeader := metadata.Pairs("authorization", "val")
-	grpc.SendHeader(ctx, sHeader)
-	ctx = metadata.NewOutgoingContext(ctx, md)
-
-	// ----------------------------------------------------
-
-	var header, trailer metadata.MD
-
-	resp, err := rpcwriter.Write(
-		ctx,
-		&grpcconnector.WriteRequest{Log: "Hello, world!"},
-		grpc.Header(&header),
-		grpc.Trailer(&trailer),
-	)
-	if err != nil {
-		log.Panicln(err)
-	}
-	fmt.Println("HERE IS RESPONSE IN CLIENT")
-	fmt.Println(resp)
-	//fmt.Println(resp.Desription)
-}
-func loadTLSCredentials() (credentials.TransportCredentials, error) {
-	// Load certificate of the CA who signed server's certificate
-	pemServerCA, err := ioutil.ReadFile("microservices/clickhouse/certs/ca-cert.pem")
-	if err != nil {
-		return nil, err
-	}
-
-	certPool := x509.NewCertPool()
-	if !certPool.AppendCertsFromPEM(pemServerCA) {
-		return nil, fmt.Errorf("failed to add server CA's certificate")
-	}
-
-	// Load client's certificate and private key
-	clientCert, err := tls.LoadX509KeyPair("microservices/clickhouse/certs/client-cert.pem", "microservices/clickhouse/certs/client-key.pem")
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the credentials and return it
-	config := &tls.Config{
-		// Self signed certificate, TODO: Let`s Encrypt
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{clientCert},
-		RootCAs:            certPool,
-	}
-
-	return credentials.NewTLS(config), nil
+	wl := logs.WriterToClickHouse{}
+	wl.InitClickHouseLogger()
+	defer wl.GrpcConn.Close()
+	slc := wl.GetCLickHouseLogger()
+	slc.Infof("cjcjc")
+	slc.Sync()
 }
 
 func signupHandle(w http.ResponseWriter, r *http.Request) {

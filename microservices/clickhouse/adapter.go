@@ -20,19 +20,6 @@ func init() {
 	logger = logs.InitLogger("./logs/clickhouseWriter.json")
 }
 
-// func main() {
-// 	defer logger.Sync()
-// 	wg := &sync.WaitGroup{}
-// 	wg.Add(1000)
-// 	for i := 0; i < 500; i++ {
-// 		go simpleHttpGet("www.google.com", wg)
-// 		go simpleHttpGet("http://www.google.com", wg)
-// 	}
-
-// 	wg.Wait()
-// 	fmt.Println("All is done!")
-// }
-
 func simpleHttpGet(url string, wg *sync.WaitGroup) {
 	logger.Debugf("Trying to hit GET request for %s", url)
 	resp, err := http.Get(url)
