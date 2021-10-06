@@ -1,5 +1,6 @@
 // Includes zap logging logic:
 // config, methods, initializers
+// Here implemented io.Writer interface for clickhouse logging microservice
 package logs
 
 import (
@@ -66,6 +67,12 @@ type WriterToClickHouse struct {
 	writerClient grpcconnector.WriterClient
 	ctx          context.Context
 	GrpcConn     *grpc.ClientConn
+	DbParms      ClickHouseDBParms
+}
+
+type ClickHouseDBParms struct {
+	DbName    string
+	TableName string
 }
 
 // Initializes TLS, grpc mappings, context for logwriter
@@ -89,7 +96,8 @@ func (w *WriterToClickHouse) InitClickHouseLogger() {
 	w.ctx = context.Background()
 	md := metadata.Pairs(
 		"api-req-id", "123qwe",
-		"subsystem", "chat_room_logger",
+		"dbName", w.DbParms.DbName,
+		"tableName", w.DbParms.TableName,
 	)
 	sHeader := metadata.Pairs("authorization", "val")
 	grpc.SendHeader(w.ctx, sHeader)
@@ -110,6 +118,7 @@ func (c *tokenAuth) RequireTransportSecurity() bool {
 	return false
 }
 
+// Enables TLS and adds certificates for the client
 func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	// Load certificate of the CA who signed server's certificate
 	pemServerCA, err := ioutil.ReadFile("microservices/clickhouse/certs/ca-cert.pem")
@@ -139,6 +148,7 @@ func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	return credentials.NewTLS(config), nil
 }
 
+// io.Writer interface implementation for zap logger sync
 func (w *WriterToClickHouse) Write(p []byte) (int, error) {
 	_, err := w.writerClient.Write(
 		w.ctx,

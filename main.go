@@ -73,6 +73,7 @@ func main() {
 
 	wl := logs.WriterToClickHouse{}
 	wl.InitClickHouseLogger()
+	wl.DbParms = logs.ClickHouseDBParms{DbName: "logs", TableName: "main"}
 	defer wl.GrpcConn.Close()
 	slc := wl.GetCLickHouseLogger()
 	slc.Infof("cjcjc")

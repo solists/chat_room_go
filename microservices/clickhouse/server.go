@@ -3,6 +3,7 @@ package main
 
 import (
 	grpcconnector "chat_room_go/microservices/clickhouse/pb"
+	logs "chat_room_go/utils/logs"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -11,11 +12,19 @@ import (
 	"net"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
+var logger *zap.SugaredLogger
+
+func init() {
+	logger = logs.InitDirLogger("./logs/clickhouseWriter.json")
+}
+
 func main() {
+	defer logger.Sync()
 	creds, err := loadTLSCredentials()
 	if err != nil {
 		log.Fatal("cannot load TLS credentials: ", err)
@@ -35,12 +44,17 @@ func main() {
 		log.Fatalln("cant listen port", err)
 	}
 	defer lis.Close()
+	defer func() {
+		err := WriteCache()
+		if err != nil {
+			logger.Panicf("%v", err)
+		}
+	}()
 
 	fmt.Println("starting server at :8081")
 	logger.Debugf("Recieved request",
 		"method", "hello",
 	)
-	//logger.Sync()
 	server.Serve(lis)
 }
 
