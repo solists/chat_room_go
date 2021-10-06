@@ -32,52 +32,52 @@ RUN groupadd -r clickhouse --gid=101 \
     && useradd -r -g clickhouse --uid=101 --home-dir=/var/lib/clickhouse --shell=/bin/bash clickhouse \
     && apt-get update \
     && apt-get install --yes --no-install-recommends \
-        apt-transport-https \
-        ca-certificates \
-        dirmngr \
-        gnupg \
-        locales \
-        wget \
-        tzdata \
+    apt-transport-https \
+    ca-certificates \
+    dirmngr \
+    gnupg \
+    locales \
+    wget \
+    tzdata \
     && mkdir -p /etc/apt/sources.list.d \
     && apt-key adv --keyserver keyserver.ubuntu.com --recv E0C56BD4 \
     && echo $repository > /etc/apt/sources.list.d/clickhouse.list \
     && if [ -n "$deb_location_url" ]; then \
-            echo "installing from custom url with deb packages: $deb_location_url" \
-            rm -rf /tmp/clickhouse_debs \
-            && mkdir -p /tmp/clickhouse_debs \
-            && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-common-static_${version}_amd64.deb" -P /tmp/clickhouse_debs \
-            && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-client_${version}_all.deb" -P /tmp/clickhouse_debs \
-            && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-server_${version}_all.deb" -P /tmp/clickhouse_debs \
-            && dpkg -i /tmp/clickhouse_debs/*.deb ; \
-       elif [ -n "$single_binary_location_url" ]; then \
-            echo "installing from single binary url: $single_binary_location_url" \
-            && rm -rf /tmp/clickhouse_binary \
-            && mkdir -p /tmp/clickhouse_binary \
-            && wget --progress=bar:force:noscroll "$single_binary_location_url" -O /tmp/clickhouse_binary/clickhouse \
-            && chmod +x /tmp/clickhouse_binary/clickhouse \
-            && /tmp/clickhouse_binary/clickhouse install --user "clickhouse" --group "clickhouse" ; \
-       else \
-           echo "installing from repository: $repository" \
-           && apt-get update \
-           && apt-get --yes -o "Dpkg::Options::=--force-confdef" -o "Dpkg::Options::=--force-confold" upgrade \
-           && apt-get install --allow-unauthenticated --yes --no-install-recommends \
-                clickhouse-common-static=$version \
-                clickhouse-client=$version \
-                clickhouse-server=$version ; \
-       fi \
+    echo "installing from custom url with deb packages: $deb_location_url" \
+    rm -rf /tmp/clickhouse_debs \
+    && mkdir -p /tmp/clickhouse_debs \
+    && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-common-static_${version}_amd64.deb" -P /tmp/clickhouse_debs \
+    && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-client_${version}_all.deb" -P /tmp/clickhouse_debs \
+    && wget --progress=bar:force:noscroll "${deb_location_url}/clickhouse-server_${version}_all.deb" -P /tmp/clickhouse_debs \
+    && dpkg -i /tmp/clickhouse_debs/*.deb ; \
+    elif [ -n "$single_binary_location_url" ]; then \
+    echo "installing from single binary url: $single_binary_location_url" \
+    && rm -rf /tmp/clickhouse_binary \
+    && mkdir -p /tmp/clickhouse_binary \
+    && wget --progress=bar:force:noscroll "$single_binary_location_url" -O /tmp/clickhouse_binary/clickhouse \
+    && chmod +x /tmp/clickhouse_binary/clickhouse \
+    && /tmp/clickhouse_binary/clickhouse install --user "clickhouse" --group "clickhouse" ; \
+    else \
+    echo "installing from repository: $repository" \
+    && apt-get update \
+    && apt-get --yes -o "Dpkg::Options::=--force-confdef" -o "Dpkg::Options::=--force-confold" upgrade \
+    && apt-get install --allow-unauthenticated --yes --no-install-recommends \
+    clickhouse-common-static=$version \
+    clickhouse-client=$version \
+    clickhouse-server=$version ; \
+    fi \
     && wget --progress=bar:force:noscroll "https://github.com/tianon/gosu/releases/download/$gosu_ver/gosu-$(dpkg --print-architecture)" -O /bin/gosu \
     && chmod +x /bin/gosu \
     && clickhouse-local -q 'SELECT * FROM system.build_options' \
     && rm -rf \
-        /var/lib/apt/lists/* \
-        /var/cache/debconf \
-        /tmp/* \
+    /var/lib/apt/lists/* \
+    /var/cache/debconf \
+    /tmp/* \
     && apt-get clean \
     && mkdir -p /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server /etc/clickhouse-client \
-    && chmod ugo+Xrw -R /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server /etc/clickhouse-client
-	&& apt install curl
-	&& apt-get install xz-utils
+    && chmod ugo+Xrw -R /var/lib/clickhouse /var/log/clickhouse-server /etc/clickhouse-server /etc/clickhouse-client \
+    && apt install curl \
+    && apt-get install xz-utils
 
 # we need to allow "others" access to clickhouse folder, because docker container
 # can be started with arbitrary uid (openshift usecase)
