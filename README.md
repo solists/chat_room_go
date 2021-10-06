@@ -10,3 +10,6 @@ There is no auth in main handler frontend, so if session expires it continues to
 # V02
 Structures are the same, so the problems. Significanly refactured frontend logic. Changed some backend logic. 4h
 
+# V03
+Added clickhouse microservice realization via grpc. Added zap logger client for this microservice, so all logs now go to clickhouse. 12h
+
