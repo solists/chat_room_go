@@ -1,11 +1,13 @@
 // Middleware for grpc
-package main
+package micromiddleware
 
 import (
+	"chat_room_go/utils/logs"
 	"context"
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -13,8 +15,14 @@ import (
 	"google.golang.org/grpc/tap"
 )
 
+var logger *zap.SugaredLogger
+
+func init() {
+	logger = logs.InitDirLogger("./logs/microMiddleware.json")
+}
+
 // Logs any incoming/outcoming request
-func logInterceptor(
+func LogInterceptor(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -44,7 +52,7 @@ func logInterceptor(
 }
 
 // Checks authorization header and token
-func authInterceptor(ctx context.Context,
+func AuthInterceptor(ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler) (interface{}, error) {
@@ -106,7 +114,7 @@ func ExtractIncoming(ctx context.Context) NiceMD {
 type AuthFunc func(ctx context.Context) (context.Context, error)
 
 // TODO: check avaibility, starts before anything: grpc.InTapHandle(rateLimiter)
-func rateLimiter(ctx context.Context, info *tap.Info) (context.Context, error) {
+func RateLimiter(ctx context.Context, info *tap.Info) (context.Context, error) {
 	fmt.Printf("--\nCheck ratelim for %s\n", info.FullMethodName)
 	return ctx, nil
 }

@@ -3,13 +3,15 @@ package main
 
 import (
 	grpcconnector "chat_room_go/microservices/clickhouse/pb"
-	logs "chat_room_go/utils/logs"
+	"chat_room_go/utils/logs"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
+
+	mmw "chat_room_go/microservices"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.uber.org/zap"
@@ -34,8 +36,8 @@ func main() {
 	}
 	server := grpc.NewServer(
 		grpc.Creds(creds),
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(logInterceptor, authInterceptor)),
-		grpc.InTapHandle(rateLimiter),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(mmw.LogInterceptor, mmw.AuthInterceptor)),
+		grpc.InTapHandle(mmw.RateLimiter),
 	)
 	grpcconnector.RegisterWriterServer(server, RPCWriter{})
 

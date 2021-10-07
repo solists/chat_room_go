@@ -4,12 +4,12 @@ syntax = "proto3";
 package grpcconnector;
 option go_package = "/grpcconnector";
 
-// The request message containing the user's name.
+// The request message containing the log.
 message WriteRequest {
   string log = 1;
 }
 
-// The response message containing the greetings
+// The response message 
 message WriteResponse {
   int32 status = 1;
   string desription = 2;
