@@ -16,6 +16,7 @@ import (
 
 type RPCReader struct{}
 
+// grpc Read implementation
 func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grpcconnector.ReadResponse, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -42,7 +43,7 @@ func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grp
 	return &grpcconnector.ReadResponse{Result: toReturn, Status: 0, Desription: "Ok"}, nil
 }
 
-// TODO: return only numberToRecieve values, also sorted
+// Reads user info from db, if user not found - empty struct
 func readFromDB(dbName, collectionName, login string) (*grpcconnector.UserInfo, error) {
 	conn := pool.Get()
 	defer conn.Close()

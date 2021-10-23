@@ -25,15 +25,10 @@ var logger *zap.SugaredLogger
 var wl logs.WriterToClickHouse
 
 func init() {
-	// Init clickhouse logger
-	//wl = logs.WriterToClickHouse{}
-	//wl.InitClickHouseLogger()
-	//wl.DbParms = logs.ClickHouseDBParms{DbName: "logs", TableName: "mongodb_service"}
-	//slc := wl.GetCLickHouseLogger()
-	//slc.Infof("Initilized")
 	logger = logs.InitDirLogger("./logs/redislogs.json")
 }
 
+// Listen and serve grpc
 func main() {
 	defer logger.Sync()
 	defer wl.GrpcConn.Close()
@@ -61,6 +56,7 @@ func main() {
 	server.Serve(lis)
 }
 
+// Establish TLS
 func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	// Load certificate of the CA who signed client's certificate
 	pemClientCA, err := ioutil.ReadFile("certs/ca-cert.pem")

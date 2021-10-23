@@ -21,6 +21,7 @@ import (
 
 type RPCReader struct{}
 
+// grpc Read implementation
 func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grpcconnector.ReadResponse, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

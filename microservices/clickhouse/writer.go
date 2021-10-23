@@ -47,6 +47,7 @@ func init() {
 
 type RPCWriter struct{}
 
+// grpc Write implementation
 func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*grpcconnector.WriteResponse, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

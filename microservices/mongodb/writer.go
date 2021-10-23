@@ -78,6 +78,8 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 func writeToDB(dbName, collectionName string, i *grpcconnector.WriteRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	// Creates connection
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(dbURL))
 	if err != nil {
 		return err
@@ -92,18 +94,21 @@ func writeToDB(dbName, collectionName string, i *grpcconnector.WriteRequest) err
 			logger.Errorf("Recovered in writeToDB", r)
 		}
 	}()
-	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+
+	// Checking connection
 	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		return err
+	}
+
+	// Retrieve collection and write to it
 	collection := client.Database(dbName).Collection(collectionName)
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	res, err := collection.InsertOne(ctx, bson.D{{"time", i.Time}, {"name", i.Name}, {"message", i.Message}})
 	if err != nil {
 		return err
 	}
 	id := res.InsertedID
-	fmt.Println(id)
+	logger.Info(id)
 
 	return nil
 }
