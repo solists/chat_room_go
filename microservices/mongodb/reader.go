@@ -1,3 +1,6 @@
+// implementation of grpc read, reads data from mongodb
+// Everytime we establish new connection to database. TODO: remove this feature
+
 package main
 
 import (

@@ -13,7 +13,7 @@ import (
 
 	mmw "chat_room_go/microservices"
 
-	grpcconnector "chat_room_go/microservices/mongodb/pb"
+	grpcconnector "chat_room_go/microservices/redis/pb"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.uber.org/zap"
@@ -31,7 +31,7 @@ func init() {
 	//wl.DbParms = logs.ClickHouseDBParms{DbName: "logs", TableName: "mongodb_service"}
 	//slc := wl.GetCLickHouseLogger()
 	//slc.Infof("Initilized")
-	logger = logs.InitDirLogger("./logs/mongologs.json")
+	logger = logs.InitDirLogger("./logs/redislogs.json")
 }
 
 func main() {
@@ -50,13 +50,13 @@ func main() {
 	grpcconnector.RegisterWriterServer(server, RPCWriter{})
 	grpcconnector.RegisterReaderServer(server, RPCReader{})
 
-	lis, err := net.Listen("tcp", ":8082")
+	lis, err := net.Listen("tcp", ":8083")
 	if err != nil {
 		log.Fatalln("cant listen port", err)
 	}
 	defer lis.Close()
 
-	fmt.Println("starting server at :8082")
+	fmt.Println("starting server at :8083")
 	logger.Debugf("Recieved request")
 	server.Serve(lis)
 }

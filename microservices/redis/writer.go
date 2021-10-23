@@ -1,25 +1,22 @@
 // Implements Write function
-// Everytime we establish new connection to database. TODO: remove this feature
+// We establish new connection everytime.
 
 package main
 
 import (
-	grpcconnector "chat_room_go/microservices/mongodb/pb"
+	grpcconnector "chat_room_go/microservices/redis/pb"
 	"context"
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"github.com/gomodule/redigo/redis"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
 const (
-	dbURL     string = "mongodb://127.0.0.1:27017"
+	dbURL     string = "redis://user:@localhost:6379/0"
 	cacheSize int    = 20
 )
 
@@ -45,6 +42,24 @@ type item struct {
 //	cache = Cache{make([]item, 0, cacheSize), &sync.RWMutex{}}
 //}
 
+// Connection pool for redis
+var pool *redis.Pool
+
+func init() {
+	pool = &redis.Pool{
+		MaxIdle:     5,
+		IdleTimeout: 60 * time.Second,
+		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", "localhost:6379") },
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			if time.Since(t) < time.Minute {
+				return nil
+			}
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+}
+
 type RPCWriter struct{}
 
 func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*grpcconnector.WriteResponse, error) {
@@ -69,41 +84,19 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 		return &grpcconnector.WriteResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
 	}
 
-	fmt.Println("Request: ", i.Time)
+	fmt.Println("Request: ", i.Login)
 
 	return &grpcconnector.WriteResponse{Status: 0, Desription: "Ok"}, nil
 }
 
 // Writes message to mongo
 func writeToDB(dbName, collectionName string, i *grpcconnector.WriteRequest) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(dbURL))
+	conn := pool.Get()
+	defer conn.Close()
+	_, err := conn.Do("HSET", redis.Args{}.Add(i.Login).AddFlat(i)...)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err = client.Disconnect(ctx); err != nil {
-			panic(err)
-		}
-	}()
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorf("Recovered in writeToDB", r)
-		}
-	}()
-	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	err = client.Ping(ctx, readpref.Primary())
-	collection := client.Database(dbName).Collection(collectionName)
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	res, err := collection.InsertOne(ctx, bson.D{{"time", i.Time}, {"name", i.Name}, {"message", i.Message}})
-	if err != nil {
-		return err
-	}
-	id := res.InsertedID
-	fmt.Println(id)
 
 	return nil
 }
