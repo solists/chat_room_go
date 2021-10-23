@@ -1,0 +1,53 @@
+syntax = "proto3";
+// protoc --go_out=plugins=grpc:. *.proto
+
+package redisgrpc;
+option go_package = "/redisgrpc";
+
+// The request message containing the user info.
+message WriteRequest {
+  string Login      = 1;
+	string Fname      = 2;
+	string Lname      = 3;
+	string Pass       = 4;
+	string Role       = 5;
+  string LastActive = 6;
+}
+
+// The message containing the user info.
+message UserInfo {
+  string Login      = 1;
+	string Fname      = 2;
+	string Lname      = 3;
+	string Pass       = 4;
+	string Role       = 5;
+  string LastActive = 6;
+}
+
+// The response message
+message WriteResponse {
+  int32 status = 1;
+  string desription = 2;
+}
+
+// The writer service definition.
+service Writer {
+  rpc   Write(WriteRequest) returns (WriteResponse) {}
+}
+
+
+// Request to acquire last user info
+message ReadRequest {
+  string Login = 1;
+}
+
+message ReadResponse {
+  UserInfo result = 1;
+  int32 status = 2;
+  string desription = 3;
+}
+
+// The writer service definition.
+service Reader {
+  rpc   Read(ReadRequest) returns (ReadResponse) {}
+}
