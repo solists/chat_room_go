@@ -1,5 +1,20 @@
 # chat_room_go
  Simple implementation of chat website written in Golang
+ EXCEPTIONALY not the best realisation. GRPC used for demo purposes, same for databses, there are at least 3 databases for such a small project.
+ Things that may be done better, excluding functionality: 
+ - fasthttp over default http
+ - provide docker compose, add dockerfile for this app, not only for databases
+ - use web storage, not cookies
+ - add tests
+ - create custom errors
+ - add persist db config for dockered databases
+ - https, let` encrypt, use tls not only in grpc
+ - websockets, pool of workers
+ - documentation
+ - monitoring by timer
+ - more panic recovery
+ - less databases, no grpc
+
 
 # V01
 Naive realization of chat program.
