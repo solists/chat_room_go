@@ -6,7 +6,6 @@ package main
 import (
 	grpcconnector "chat_room_go/microservices/mongodb/pb"
 	"context"
-	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -19,19 +18,9 @@ import (
 )
 
 const (
-	dbURL     string = "mongodb://127.0.0.1:27017"
-	cacheSize int    = 20
+	dbURL string = "mongodb://127.0.0.1:27017"
+	//cacheSize int    = 20
 )
-
-// Stores values which will be written to database
-type item struct {
-	messageTime time.Time
-	name        string
-	message     string
-	actionTime  time.Time
-	dbName      string
-	tableName   string
-}
 
 // TODO: Add chache
 //type cache struct {
@@ -47,7 +36,9 @@ type item struct {
 
 type RPCWriter struct{}
 
+// grpc Write implementation
 func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*grpcconnector.WriteResponse, error) {
+	logger.Info(ctx, i)
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return &grpcconnector.WriteResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
@@ -69,8 +60,7 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 		return &grpcconnector.WriteResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
 	}
 
-	fmt.Println("Request: ", i.Time)
-
+	logger.Info("Response ok")
 	return &grpcconnector.WriteResponse{Status: 0, Desription: "Ok"}, nil
 }
 

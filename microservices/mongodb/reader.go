@@ -6,7 +6,6 @@ package main
 import (
 	grpcconnector "chat_room_go/microservices/mongodb/pb"
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -23,6 +22,7 @@ type RPCReader struct{}
 
 // grpc Read implementation
 func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grpcconnector.ReadResponse, error) {
+	logger.Info(ctx, i)
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return &grpcconnector.ReadResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
@@ -43,8 +43,7 @@ func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grp
 		return &grpcconnector.ReadResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
 	}
 
-	fmt.Println("Request: ", i.Time)
-
+	logger.Info(toReturn)
 	return &grpcconnector.ReadResponse{Results: toReturn, Status: 0, Desription: "Ok"}, nil
 }
 

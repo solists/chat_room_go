@@ -4,7 +4,6 @@ import (
 	"chat_room_go/models"
 	"chat_room_go/utils/logs"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
 	"time"
@@ -68,6 +67,7 @@ func Cleanup() {
 
 // Handles signup page TODO: rework front
 func signupHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
@@ -115,6 +115,7 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 
 // Returns messages to front
 func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Only GET methods allowed", http.StatusMethodNotAllowed)
 		return
@@ -132,9 +133,8 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 
 	numChatMessages := 5
 	dbMessages, err := MongoAdapter.Read()
-	fmt.Println(dbMessages)
 	if err != nil {
-		fmt.Println(err)
+		logs.Logger.Info(err)
 	}
 	numOfAllMess := len(dbMessages)
 	var lastMessages = make([]*mongoconnector.MessageInfo, 0, 5)
@@ -155,6 +155,7 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 
 // Handles login page
 func loginHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
@@ -191,6 +192,7 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 
 // Handles main page
 func mainHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if !cFound {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -236,7 +238,7 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: u.Login, Message: sMess}
 			_, err := MongoAdapter.Write(m.Message, m.Name, m.Time)
 			if err != nil {
-				fmt.Println(err)
+				logs.Logger.Info(err)
 			}
 		}
 	}

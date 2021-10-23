@@ -6,7 +6,6 @@ package main
 import (
 	grpcconnector "chat_room_go/microservices/redis/pb"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -16,19 +15,9 @@ import (
 )
 
 const (
-	dbURL     string = "redis://user:@localhost:6379/0"
-	cacheSize int    = 20
+	dbURL string = "localhost:6379"
+	//cacheSize int    = 20
 )
-
-// Stores values which will be written to database
-type item struct {
-	messageTime time.Time
-	name        string
-	message     string
-	actionTime  time.Time
-	dbName      string
-	tableName   string
-}
 
 // TODO: Add chache
 //type cache struct {
@@ -49,7 +38,7 @@ func init() {
 	pool = &redis.Pool{
 		MaxIdle:     5,
 		IdleTimeout: 60 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", "localhost:6379") },
+		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", dbURL) },
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			if time.Since(t) < time.Minute {
 				return nil
@@ -62,7 +51,9 @@ func init() {
 
 type RPCWriter struct{}
 
+// grpc Write implementation
 func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*grpcconnector.WriteResponse, error) {
+	logger.Info(ctx, i)
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return &grpcconnector.WriteResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
@@ -84,12 +75,11 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 		return &grpcconnector.WriteResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
 	}
 
-	fmt.Println("Request: ", i.Login)
-
+	logger.Info("Response ok")
 	return &grpcconnector.WriteResponse{Status: 0, Desription: "Ok"}, nil
 }
 
-// Writes message to mongo
+// Writes message to redis
 func writeToDB(dbName, collectionName string, i *grpcconnector.WriteRequest) error {
 	conn := pool.Get()
 	defer conn.Close()
