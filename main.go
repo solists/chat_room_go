@@ -3,31 +3,21 @@ package main
 import (
 	"chat_room_go/models"
 	"chat_room_go/utils/logs"
-	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"time"
 
 	mongoconnector "chat_room_go/microservices/mongodb/pb"
-	redisconnector "chat_room_go/microservices/redis/pb"
 
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
 )
 
-// TODO: remove race condition
 var tpl *template.Template
 
-//var dbUsers map[string]models.User
+// TODO: remove probable race condition
 var dbSessions map[string]session
 var dbSessionsCleaned time.Time
 
@@ -35,29 +25,9 @@ const (
 	sessionLength int = 30
 )
 
-var wm grpcMongoAdapter
-var wr grpcRedisAdapter
-
 func init() {
 	tpl = template.Must(template.ParseGlob("./views/*.gohtml"))
 	dbSessions = make(map[string]session)
-	//dbMessages = make([]models.ChatMessage, 0)
-}
-
-// Init grpc to mongo
-func init() {
-	wm = grpcMongoAdapter{}
-	wm.dbParms = dbParms{DbName: "test", CollectionName: "messages"}
-	wm.url = "127.0.0.1:8082"
-	wm.InitMongoAdapter()
-}
-
-// Init grpc to redis
-func init() {
-	wr = grpcRedisAdapter{}
-	wr.dbParms = dbParms{DbName: "test", CollectionName: "users"}
-	wr.url = "127.0.0.1:8083"
-	wr.InitRedisAdapter()
 }
 
 type session struct {
@@ -65,12 +35,8 @@ type session struct {
 	lastActive time.Time
 }
 
-const (
-	address     = "localhost:50051"
-	defaultName = "world"
-)
-
 func main() {
+	defer Cleanup()
 	http.HandleFunc("/login", loginHandle)
 	http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
 	http.HandleFunc("/main", mainHandle)
@@ -82,207 +48,25 @@ func main() {
 
 	http.ListenAndServe("localhost:8080", nil)
 
-	wl := logs.WriterToClickHouse{}
-	wl.InitClickHouseLogger()
-	wl.DbParms = logs.ClickHouseDBParms{DbName: "logs", TableName: "main"}
-	defer wl.GrpcConn.Close()
-	slc := wl.GetCLickHouseLogger()
-	slc.Infof("cjcjc")
-	slc.Sync()
-
-	defer wm.grpcConn.Close()
-	defer wr.grpcConn.Close()
+	logs.Logger.Infof("Started server")
+	logs.Logger.Sync()
 
 	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
 
-	_, err := wr.Write(models.User{Login: "tyt@tyt", Pass: bs})
+	_, err := RedisAdapter.Write(models.User{Login: "tyt@tyt", Pass: bs})
 	if err != nil {
-		log.Panicln(err)
+		logs.Logger.Panic(err)
 	}
-	res, err := wr.Read("ssdfsgsxs")
-	if err != nil {
-		log.Panicln(err)
-	}
-	fmt.Println(res)
 }
 
-// Struct, that implements io.Writer, keeps all data for grpc request TODO: GrpcConn closel ogic move inside
-type grpcMongoAdapter struct {
-	writerClient mongoconnector.WriterClient
-	readerClient mongoconnector.ReaderClient
-	ctx          context.Context
-	grpcConn     *grpc.ClientConn
-	dbParms      dbParms
-	url          string
+// Closes grpc connections
+func Cleanup() {
+	defer logs.WL.GrpcConn.Close()
+	defer MongoAdapter.grpcConn.Close()
+	defer RedisAdapter.grpcConn.Close()
 }
 
-type dbParms struct {
-	DbName         string
-	CollectionName string
-}
-
-// Struct, that implements io.Writer, keeps all data for grpc request TODO: GrpcConn closel ogic move inside
-type grpcRedisAdapter struct {
-	writerClient redisconnector.WriterClient
-	readerClient redisconnector.ReaderClient
-	ctx          context.Context
-	grpcConn     *grpc.ClientConn
-	dbParms      dbParms
-	url          string
-}
-
-func (w *grpcRedisAdapter) Write(u models.User) (int, error) {
-	_, err := w.writerClient.Write(
-		w.ctx,
-		&redisconnector.WriteRequest{Login: u.Login, Fname: u.Fname, Lname: u.Lname, Pass: string(u.Pass), Role: u.Role, LastActive: time.Now().Format("2006-01-02 15:04:05")},
-	)
-	if err != nil {
-		return 0, err
-	}
-	return 0, nil
-}
-
-func (w *grpcRedisAdapter) Read(login string) (*models.User, error) {
-	toReturn, err := w.readerClient.Read(
-		w.ctx,
-		&redisconnector.ReadRequest{Login: login},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if toReturn.Result == nil {
-		return nil, nil
-	}
-	r := toReturn.Result
-	return &models.User{r.Login, r.Fname, r.Lname, []byte(r.Pass), r.Role}, nil
-}
-
-// Initializes TLS, grpc mappings, context for logwriter
-func (w *grpcRedisAdapter) InitRedisAdapter() {
-	creds, err := loadTLSCredentials()
-	if err != nil {
-		log.Panicln(err)
-	}
-
-	w.grpcConn, err = grpc.Dial(
-		w.url,
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
-		grpc.WithTransportCredentials(creds),
-	)
-	if err != nil {
-		log.Fatalf("cant connect to grpc")
-	}
-
-	w.writerClient = redisconnector.NewWriterClient(w.grpcConn)
-	w.readerClient = redisconnector.NewReaderClient(w.grpcConn)
-
-	w.ctx = context.Background()
-	md := metadata.Pairs(
-		"api-req-id", "123qwe",
-		"dbname", w.dbParms.DbName,
-		"collectionname", w.dbParms.CollectionName,
-	)
-	sHeader := metadata.Pairs("authorization", "val")
-	grpc.SendHeader(w.ctx, sHeader)
-	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
-}
-
-func (w *grpcMongoAdapter) Write(message, name, time string) (int, error) {
-	_, err := w.writerClient.Write(
-		w.ctx,
-		&mongoconnector.WriteRequest{Message: message, Name: name, Time: time},
-	)
-	if err != nil {
-		return 0, err
-	}
-	return 0, nil
-}
-
-func (w *grpcMongoAdapter) Read() ([]*mongoconnector.MessageInfo, error) {
-	toReturn, err := w.readerClient.Read(
-		w.ctx,
-		&mongoconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 10},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return toReturn.Results, nil
-}
-
-// Initializes TLS, grpc mappings, context for logwriter
-func (w *grpcMongoAdapter) InitMongoAdapter() {
-	creds, err := loadTLSCredentials()
-	if err != nil {
-		log.Panicln(err)
-	}
-
-	w.grpcConn, err = grpc.Dial(
-		w.url,
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
-		grpc.WithTransportCredentials(creds),
-	)
-	if err != nil {
-		log.Fatalf("cant connect to grpc")
-	}
-
-	w.writerClient = mongoconnector.NewWriterClient(w.grpcConn)
-	w.readerClient = mongoconnector.NewReaderClient(w.grpcConn)
-
-	w.ctx = context.Background()
-	md := metadata.Pairs(
-		"api-req-id", "123qwe",
-		"dbname", w.dbParms.DbName,
-		"collectionname", w.dbParms.CollectionName,
-	)
-	sHeader := metadata.Pairs("authorization", "val")
-	grpc.SendHeader(w.ctx, sHeader)
-	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
-}
-
-type tokenAuth struct {
-	Token string
-}
-
-func (t *tokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"authorization": t.Token,
-	}, nil
-}
-
-func (c *tokenAuth) RequireTransportSecurity() bool {
-	return false
-}
-
-// Enables TLS and adds certificates for the client
-func loadTLSCredentials() (credentials.TransportCredentials, error) {
-	// Load certificate of the CA who signed server's certificate
-	pemServerCA, err := ioutil.ReadFile("microservices/mongodb/certs/ca-cert.pem")
-	if err != nil {
-		return nil, err
-	}
-
-	certPool := x509.NewCertPool()
-	if !certPool.AppendCertsFromPEM(pemServerCA) {
-		return nil, fmt.Errorf("failed to add server CA's certificate")
-	}
-
-	// Load client's certificate and private key
-	clientCert, err := tls.LoadX509KeyPair("microservices/mongodb/certs/client-cert.pem", "microservices/clickhouse/certs/client-key.pem")
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the credentials and return it
-	config := &tls.Config{
-		// Self signed certificate, TODO: Let`s Encrypt
-		InsecureSkipVerify: true,
-		Certificates:       []tls.Certificate{clientCert},
-		RootCAs:            certPool,
-	}
-
-	return credentials.NewTLS(config), nil
-}
-
+// Handles signup page TODO: rework front
 func signupHandle(w http.ResponseWriter, r *http.Request) {
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
@@ -297,9 +81,9 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 		l := r.FormValue("lastname")
 		role := r.FormValue("role")
 		// username taken?
-		res, err := wr.Read(un)
+		res, err := RedisAdapter.Read(un)
 		if err != nil {
-			log.Panicln(err)
+			logs.Logger.Panic(err)
 		}
 		if res != nil {
 			http.Error(w, "Username already taken", http.StatusForbidden)
@@ -312,10 +96,15 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-		u = models.User{un, f, l, bs, role}
-		_, err = wr.Write(u)
+		u = models.User{
+			Login: un,
+			Fname: f,
+			Lname: l,
+			Pass:  bs,
+			Role:  role}
+		_, err = RedisAdapter.Write(u)
 		if err != nil {
-			log.Panicln(err)
+			logs.Logger.Panic(err)
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -324,6 +113,7 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 	tpl.ExecuteTemplate(w, "signup.gohtml", u)
 }
 
+// Returns messages to front
 func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Only GET methods allowed", http.StatusMethodNotAllowed)
@@ -341,7 +131,7 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	numChatMessages := 5
-	dbMessages, err := wm.Read()
+	dbMessages, err := MongoAdapter.Read()
 	fmt.Println(dbMessages)
 	if err != nil {
 		fmt.Println(err)
@@ -363,6 +153,7 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 	w.Write(outputJSON)
 }
 
+// Handles login page
 func loginHandle(w http.ResponseWriter, r *http.Request) {
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
@@ -373,9 +164,9 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 		un := r.FormValue("username")
 		pswrd := r.FormValue("password")
 		// is there a username?
-		u, err := wr.Read("ss")
+		u, err := RedisAdapter.Read(un)
 		if err != nil {
-			log.Panicln(err)
+			logs.Logger.Panic(err)
 		}
 		if u == nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
@@ -393,11 +184,12 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	err := tpl.ExecuteTemplate(w, "login.gohtml", "Sam")
 	if err != nil {
-		log.Fatalln(err)
+		logs.Logger.Panic(err)
 	}
 
 }
 
+// Handles main page
 func mainHandle(w http.ResponseWriter, r *http.Request) {
 	c, cFound := getSessionCookie(w, r)
 	if !cFound {
@@ -425,11 +217,6 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 				MaxAge: -1,
 			}
 			http.SetCookie(w, c)
-
-			// clean up dbSessions
-			if time.Since(dbSessionsCleaned) > (time.Second * 30) {
-				go cleanSessions()
-			}
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 		}
 	} else if r.Method == http.MethodPost {
@@ -440,14 +227,14 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		err := r.ParseForm()
 		if err != nil {
-			log.Fatalln(err)
+			logs.Logger.Panic(err)
 		}
 
 		sMess := r.PostForm.Get("usermsg")
 
 		if sMess != "" {
 			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: u.Login, Message: sMess}
-			_, err := wm.Write(m.Message, m.Name, m.Time)
+			_, err := MongoAdapter.Write(m.Message, m.Name, m.Time)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -457,20 +244,21 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	err := tpl.ExecuteTemplate(w, "index.gohtml", nil) //dbMessages)
+	err := tpl.ExecuteTemplate(w, "index.gohtml", nil)
 	if err != nil {
 		http.Error(w, "Error during processing template", http.StatusInternalServerError)
-		log.Panicln(err)
+		logs.Logger.Panic(err)
 	}
 }
 
+// Gets user from cookie
 func getUser(c *http.Cookie) (models.User, bool) {
 	// if the user exists already, get user
 	var u models.User
 	if s, ok := dbSessions[c.Value]; ok {
-		res, err := wr.Read(s.un)
+		res, err := RedisAdapter.Read(s.un)
 		if err != nil {
-			log.Panicln(err)
+			logs.Logger.Panic(err)
 		}
 		u = *res
 
@@ -497,6 +285,7 @@ func getSessionCookie(w http.ResponseWriter, r *http.Request) (*http.Cookie, boo
 	return c, found
 }
 
+// Updates cookie
 func updateSession(w http.ResponseWriter, c *http.Cookie) {
 	s, ok := dbSessions[c.Value]
 	if ok {
@@ -514,24 +303,12 @@ func alreadyLoggedIn(w http.ResponseWriter, c *http.Cookie) bool {
 	return ok
 }
 
+// Removes expired cookies, TODO: move session to redis
 func cleanSessions() {
-	fmt.Println("BEFORE CLEAN") // for demonstration purposes
-	showSessions()              // for demonstration purposes
 	for k, v := range dbSessions {
 		if time.Since(v.lastActive) > (time.Second * 30) {
 			delete(dbSessions, k)
 		}
 	}
 	dbSessionsCleaned = time.Now()
-	fmt.Println("AFTER CLEAN") // for demonstration purposes
-	showSessions()             // for demonstration purposes
-}
-
-// for demonstration purposes
-func showSessions() {
-	fmt.Println("********")
-	for k, v := range dbSessions {
-		fmt.Println(k, v.un)
-	}
-	fmt.Println("")
 }

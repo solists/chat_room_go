@@ -20,6 +20,18 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+var Logger *zap.SugaredLogger
+var WL WriterToClickHouse
+
+// Init logger
+func Init() {
+	WL = WriterToClickHouse{}
+	WL.InitClickHouseLogger()
+	WL.DbParms = ClickHouseDBParms{DbName: "logs", TableName: "main"}
+	Logger = WL.GetCLickHouseLogger()
+}
+
+// Returns zap logger, which writes to directory
 func InitDirLogger(dirName string) *zap.SugaredLogger {
 	writeSyncer := getLogWriter(dirName)
 	encoder := getEncoder()
@@ -30,6 +42,7 @@ func InitDirLogger(dirName string) *zap.SugaredLogger {
 	return logger.Sugar()
 }
 
+// Returns encoder for zap
 func getEncoder() zapcore.Encoder {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -37,6 +50,7 @@ func getEncoder() zapcore.Encoder {
 	return zapcore.NewJSONEncoder(encoderConfig)
 }
 
+// Adds sync, and returns file writeSyncer
 func getLogWriter(dirName string) zapcore.WriteSyncer {
 	file, err := os.OpenFile(dirName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0660)
 	if err != nil {
@@ -70,6 +84,7 @@ type WriterToClickHouse struct {
 	DbParms      ClickHouseDBParms
 }
 
+// Params for clickhouse db
 type ClickHouseDBParms struct {
 	DbName    string
 	TableName string
@@ -104,16 +119,19 @@ func (w *WriterToClickHouse) InitClickHouseLogger() {
 	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
 }
 
+// Security token, might be configurable
 type tokenAuth struct {
 	Token string
 }
 
+// Realization of PerRPCCredentials interface
 func (t *tokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
 	return map[string]string{
 		"authorization": t.Token,
 	}, nil
 }
 
+// Realization of WithPerRPCCredentials interface
 func (c *tokenAuth) RequireTransportSecurity() bool {
 	return false
 }
