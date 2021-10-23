@@ -1,20 +1,22 @@
 package main
 
 import (
+	"chat_room_go/models"
+	"chat_room_go/utils/logs"
 	"encoding/json"
-	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"time"
+
+	mongoconnector "chat_room_go/microservices/mongodb/pb"
 
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// TODO: remove race condition
 var tpl *template.Template
-var dbUsers map[string]user
+
+// TODO: remove probable race condition
 var dbSessions map[string]session
 var dbSessionsCleaned time.Time
 
@@ -22,30 +24,9 @@ const (
 	sessionLength int = 30
 )
 
-var dbMessages []chatMessage
-
 func init() {
 	tpl = template.Must(template.ParseGlob("./views/*.gohtml"))
-	dbUsers = make(map[string]user)
 	dbSessions = make(map[string]session)
-	dbMessages = make([]chatMessage, 0)
-
-	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
-	dbUsers["tyt@tyt"] = user{login: "tyt@tyt", pass: bs}
-}
-
-type chatMessage struct {
-	Time  time.Time
-	Name  string
-	Value string
-}
-
-type user struct {
-	login string
-	fname string
-	lname string
-	pass  []byte
-	role  string
 }
 
 type session struct {
@@ -54,6 +35,7 @@ type session struct {
 }
 
 func main() {
+	defer Cleanup()
 	http.HandleFunc("/login", loginHandle)
 	http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
 	http.HandleFunc("/main", mainHandle)
@@ -64,14 +46,33 @@ func main() {
 	http.Handle("/favicon.ico", http.NotFoundHandler())
 
 	http.ListenAndServe("localhost:8080", nil)
+
+	logs.Logger.Infof("Started server")
+	logs.Logger.Sync()
+
+	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
+
+	_, err := RedisAdapter.Write(models.User{Login: "tyt@tyt", Pass: bs})
+	if err != nil {
+		logs.Logger.Panic(err)
+	}
 }
 
+// Closes grpc connections
+func Cleanup() {
+	defer logs.WL.GrpcConn.Close()
+	defer MongoAdapter.grpcConn.Close()
+	defer RedisAdapter.grpcConn.Close()
+}
+
+// Handles signup page TODO: rework front
 func signupHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
 	}
-	var u user
+	var u models.User
 	if r.Method == http.MethodPost {
 		// get form values
 		un := r.FormValue("username")
@@ -80,7 +81,11 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 		l := r.FormValue("lastname")
 		role := r.FormValue("role")
 		// username taken?
-		if _, ok := dbUsers[un]; ok {
+		res, err := RedisAdapter.Read(un)
+		if err != nil {
+			logs.Logger.Panic(err)
+		}
+		if res != nil {
 			http.Error(w, "Username already taken", http.StatusForbidden)
 			return
 		}
@@ -91,8 +96,16 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-		u = user{un, f, l, bs, role}
-		dbUsers[un] = u
+		u = models.User{
+			Login: un,
+			Fname: f,
+			Lname: l,
+			Pass:  bs,
+			Role:  role}
+		_, err = RedisAdapter.Write(u)
+		if err != nil {
+			logs.Logger.Panic(err)
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -100,7 +113,9 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 	tpl.ExecuteTemplate(w, "signup.gohtml", u)
 }
 
+// Returns messages to front
 func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Only GET methods allowed", http.StatusMethodNotAllowed)
 		return
@@ -115,9 +130,14 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not logged in", http.StatusForbidden)
 		return
 	}
+
 	numChatMessages := 5
+	dbMessages, err := MongoAdapter.Read()
+	if err != nil {
+		logs.Logger.Info(err)
+	}
 	numOfAllMess := len(dbMessages)
-	var lastMessages = make([]chatMessage, 5)
+	var lastMessages = make([]*mongoconnector.MessageInfo, 0, 5)
 	if numOfAllMess < numChatMessages {
 		lastMessages = dbMessages
 	} else {
@@ -133,7 +153,9 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 	w.Write(outputJSON)
 }
 
+// Handles login page
 func loginHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if cFound && alreadyLoggedIn(w, c) {
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
@@ -143,13 +165,16 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 		un := r.FormValue("username")
 		pswrd := r.FormValue("password")
 		// is there a username?
-		u, ok := dbUsers[un]
-		if !ok {
+		u, err := RedisAdapter.Read(un)
+		if err != nil {
+			logs.Logger.Panic(err)
+		}
+		if u == nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
 		}
 		// does the entered password match the stored password?
-		err := bcrypt.CompareHashAndPassword(u.pass, []byte(pswrd))
+		err = bcrypt.CompareHashAndPassword([]byte(u.Pass), []byte(pswrd))
 		if err != nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
@@ -160,12 +185,14 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	err := tpl.ExecuteTemplate(w, "login.gohtml", "Sam")
 	if err != nil {
-		log.Fatalln(err)
+		logs.Logger.Panic(err)
 	}
 
 }
 
+// Handles main page
 func mainHandle(w http.ResponseWriter, r *http.Request) {
+	logs.Logger.Info(r)
 	c, cFound := getSessionCookie(w, r)
 	if !cFound {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -192,11 +219,6 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 				MaxAge: -1,
 			}
 			http.SetCookie(w, c)
-
-			// clean up dbSessions
-			if time.Since(dbSessionsCleaned) > (time.Second * 30) {
-				go cleanSessions()
-			}
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 		}
 	} else if r.Method == http.MethodPost {
@@ -207,32 +229,40 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		err := r.ParseForm()
 		if err != nil {
-			log.Fatalln(err)
+			logs.Logger.Panic(err)
 		}
 
 		sMess := r.PostForm.Get("usermsg")
 
 		if sMess != "" {
-			m := chatMessage{Time: time.Now(), Name: u.login, Value: sMess}
-			dbMessages = append(dbMessages, m)
+			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: u.Login, Message: sMess}
+			_, err := MongoAdapter.Write(m.Message, m.Name, m.Time)
+			if err != nil {
+				logs.Logger.Info(err)
+			}
 		}
 	}
 	if !userFound {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	err := tpl.ExecuteTemplate(w, "index.gohtml", nil) //dbMessages)
+	err := tpl.ExecuteTemplate(w, "index.gohtml", nil)
 	if err != nil {
 		http.Error(w, "Error during processing template", http.StatusInternalServerError)
-		log.Panicln(err)
+		logs.Logger.Panic(err)
 	}
 }
 
-func getUser(c *http.Cookie) (user, bool) {
+// Gets user from cookie
+func getUser(c *http.Cookie) (models.User, bool) {
 	// if the user exists already, get user
-	var u user
+	var u models.User
 	if s, ok := dbSessions[c.Value]; ok {
-		u = dbUsers[s.un]
+		res, err := RedisAdapter.Read(s.un)
+		if err != nil {
+			logs.Logger.Panic(err)
+		}
+		u = *res
 
 		return u, true
 	}
@@ -257,6 +287,7 @@ func getSessionCookie(w http.ResponseWriter, r *http.Request) (*http.Cookie, boo
 	return c, found
 }
 
+// Updates cookie
 func updateSession(w http.ResponseWriter, c *http.Cookie) {
 	s, ok := dbSessions[c.Value]
 	if ok {
@@ -274,24 +305,12 @@ func alreadyLoggedIn(w http.ResponseWriter, c *http.Cookie) bool {
 	return ok
 }
 
+// Removes expired cookies, TODO: move session to redis
 func cleanSessions() {
-	fmt.Println("BEFORE CLEAN") // for demonstration purposes
-	showSessions()              // for demonstration purposes
 	for k, v := range dbSessions {
 		if time.Since(v.lastActive) > (time.Second * 30) {
 			delete(dbSessions, k)
 		}
 	}
 	dbSessionsCleaned = time.Now()
-	fmt.Println("AFTER CLEAN") // for demonstration purposes
-	showSessions()             // for demonstration purposes
-}
-
-// for demonstration purposes
-func showSessions() {
-	fmt.Println("********")
-	for k, v := range dbSessions {
-		fmt.Println(k, v.un)
-	}
-	fmt.Println("")
 }

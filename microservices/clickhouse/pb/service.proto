@@ -1,0 +1,21 @@
+syntax = "proto3";
+// protoc --go_out=plugins=grpc:. *.proto
+
+package grpcconnector;
+option go_package = "/grpcconnector";
+
+// The request message containing the log.
+message WriteRequest {
+  string log = 1;
+}
+
+// The response message 
+message WriteResponse {
+  int32 status = 1;
+  string desription = 2;
+}
+
+// The writer service definition.
+service Writer {
+  rpc   Write(WriteRequest) returns (WriteResponse) {}
+}
