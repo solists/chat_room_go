@@ -85,13 +85,13 @@
                     for(var i = 0; i < data.length; i++)
                     {
                         var msg = data[i];
-                        var msgT = new Date(msg.Time)
-                        console.log(msg.Value)
+                        var msgT = new Date(msg.time)
+                        //console.log(msg.message)
                         if (msgT > lastMessageTime)
                         {
                             console.log(msgT)
-                            $('<li/>').text(msg.Value).
-                                prepend( $('<small />').text(msgT.getHours() + ':' + msgT.getMinutes() + ':' + msgT.getSeconds() + ' ' + msg.Name) ).
+                            $('<li/>').text(msg.message).
+                                prepend( $('<small />').text(msgT.getHours() + ':' + msgT.getMinutes() + ':' + msgT.getSeconds() + ' ' + msg.name) ).
                                 appendTo('#messages');
                             $('#messages').data('lastMessageTime', msgT);
                             console.log(lastMessageTime)

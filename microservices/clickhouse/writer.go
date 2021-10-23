@@ -64,7 +64,7 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 	err := writeToDB(dbName, tableName, i.Log)
 	if err != nil {
 		logger.Errorf("Error during table insertion \"%s\"", err)
-		return &grpcconnector.WriteResponse{Status: 403, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
+		return &grpcconnector.WriteResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
 	}
 
 	fmt.Println("Request: ", i.Log)

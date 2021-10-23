@@ -1,21 +1,31 @@
 package main
 
 import (
+	"chat_room_go/models"
 	"chat_room_go/utils/logs"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
+	grpcconnector "chat_room_go/microservices/mongodb/pb"
+
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 // TODO: remove race condition
 var tpl *template.Template
-var dbUsers map[string]user
+var dbUsers map[string]models.User
 var dbSessions map[string]session
 var dbSessionsCleaned time.Time
 
@@ -23,30 +33,21 @@ const (
 	sessionLength int = 30
 )
 
-var dbMessages []chatMessage
+//var dbMessages []models.ChatMessage
+var wm mongoDBAdapter
 
 func init() {
 	tpl = template.Must(template.ParseGlob("./views/*.gohtml"))
-	dbUsers = make(map[string]user)
+	dbUsers = make(map[string]models.User)
 	dbSessions = make(map[string]session)
-	dbMessages = make([]chatMessage, 0)
+	//dbMessages = make([]models.ChatMessage, 0)
 
 	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
-	dbUsers["tyt@tyt"] = user{login: "tyt@tyt", pass: bs}
-}
+	dbUsers["tyt@tyt"] = models.User{Login: "tyt@tyt", Pass: bs}
 
-type chatMessage struct {
-	Time  time.Time
-	Name  string
-	Value string
-}
-
-type user struct {
-	login string
-	fname string
-	lname string
-	pass  []byte
-	role  string
+	wm = mongoDBAdapter{}
+	wm.DbParms = MongoDBParms{DbName: "test", CollectionName: "messages"}
+	wm.InitMongoAdapter()
 }
 
 type session struct {
@@ -60,16 +61,16 @@ const (
 )
 
 func main() {
-	// http.HandleFunc("/login", loginHandle)
-	// http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
-	// http.HandleFunc("/main", mainHandle)
-	// http.HandleFunc("/signup", signupHandle)
-	// http.HandleFunc("/messages", getMessagesHandle)
+	http.HandleFunc("/login", loginHandle)
+	http.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
+	http.HandleFunc("/main", mainHandle)
+	http.HandleFunc("/signup", signupHandle)
+	http.HandleFunc("/messages", getMessagesHandle)
 
-	// http.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
-	// http.Handle("/favicon.ico", http.NotFoundHandler())
+	http.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
+	http.Handle("/favicon.ico", http.NotFoundHandler())
 
-	// http.ListenAndServe("localhost:8080", nil)
+	http.ListenAndServe("localhost:8080", nil)
 
 	wl := logs.WriterToClickHouse{}
 	wl.InitClickHouseLogger()
@@ -78,6 +79,118 @@ func main() {
 	slc := wl.GetCLickHouseLogger()
 	slc.Infof("cjcjc")
 	slc.Sync()
+
+	defer wm.GrpcConn.Close()
+}
+
+// Struct, that implements io.Writer, keeps all data for grpc request TODO: GrpcConn closel ogic move inside
+type mongoDBAdapter struct {
+	writerClient grpcconnector.WriterClient
+	readerClient grpcconnector.ReaderClient
+	ctx          context.Context
+	GrpcConn     *grpc.ClientConn
+	DbParms      MongoDBParms
+}
+
+type MongoDBParms struct {
+	DbName         string
+	CollectionName string
+}
+
+func (w *mongoDBAdapter) Write(message, name, time string) (int, error) {
+	_, err := w.writerClient.Write(
+		w.ctx,
+		&grpcconnector.WriteRequest{Message: message, Name: name, Time: time},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+func (w *mongoDBAdapter) Read() ([]*grpcconnector.MessageInfo, error) {
+	toReturn, err := w.readerClient.Read(
+		w.ctx,
+		&grpcconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 10},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return toReturn.Results, nil
+}
+
+// Initializes TLS, grpc mappings, context for logwriter
+func (w *mongoDBAdapter) InitMongoAdapter() {
+	creds, err := loadTLSCredentials()
+	if err != nil {
+		log.Panicln(err)
+	}
+
+	w.GrpcConn, err = grpc.Dial(
+		"127.0.0.1:8082",
+		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		grpc.WithTransportCredentials(creds),
+	)
+	if err != nil {
+		log.Fatalf("cant connect to grpc")
+	}
+
+	w.writerClient = grpcconnector.NewWriterClient(w.GrpcConn)
+	w.readerClient = grpcconnector.NewReaderClient(w.GrpcConn)
+
+	w.ctx = context.Background()
+	md := metadata.Pairs(
+		"api-req-id", "123qwe",
+		"dbname", w.DbParms.DbName,
+		"collectionname", w.DbParms.CollectionName,
+	)
+	sHeader := metadata.Pairs("authorization", "val")
+	grpc.SendHeader(w.ctx, sHeader)
+	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
+}
+
+type tokenAuth struct {
+	Token string
+}
+
+func (t *tokenAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{
+		"authorization": t.Token,
+	}, nil
+}
+
+func (c *tokenAuth) RequireTransportSecurity() bool {
+	return false
+}
+
+// Enables TLS and adds certificates for the client
+func loadTLSCredentials() (credentials.TransportCredentials, error) {
+	// Load certificate of the CA who signed server's certificate
+	pemServerCA, err := ioutil.ReadFile("microservices/mongodb/certs/ca-cert.pem")
+	if err != nil {
+		return nil, err
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(pemServerCA) {
+		return nil, fmt.Errorf("failed to add server CA's certificate")
+	}
+
+	// Load client's certificate and private key
+	clientCert, err := tls.LoadX509KeyPair("microservices/mongodb/certs/client-cert.pem", "microservices/clickhouse/certs/client-key.pem")
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the credentials and return it
+	config := &tls.Config{
+		// Self signed certificate, TODO: Let`s Encrypt
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{clientCert},
+		RootCAs:            certPool,
+	}
+
+	return credentials.NewTLS(config), nil
 }
 
 func signupHandle(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +198,7 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 	if cFound && alreadyLoggedIn(w, c) {
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
 	}
-	var u user
+	var u models.User
 	if r.Method == http.MethodPost {
 		// get form values
 		un := r.FormValue("username")
@@ -105,7 +218,7 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
-		u = user{un, f, l, bs, role}
+		u = models.User{un, f, l, bs, role}
 		dbUsers[un] = u
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -129,9 +242,15 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not logged in", http.StatusForbidden)
 		return
 	}
+
 	numChatMessages := 5
+	dbMessages, err := wm.Read()
+	fmt.Println(dbMessages)
+	if err != nil {
+		fmt.Println(err)
+	}
 	numOfAllMess := len(dbMessages)
-	var lastMessages = make([]chatMessage, 5)
+	var lastMessages = make([]*grpcconnector.MessageInfo, 0, 5)
 	if numOfAllMess < numChatMessages {
 		lastMessages = dbMessages
 	} else {
@@ -163,7 +282,7 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// does the entered password match the stored password?
-		err := bcrypt.CompareHashAndPassword(u.pass, []byte(pswrd))
+		err := bcrypt.CompareHashAndPassword(u.Pass, []byte(pswrd))
 		if err != nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
@@ -227,8 +346,11 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 		sMess := r.PostForm.Get("usermsg")
 
 		if sMess != "" {
-			m := chatMessage{Time: time.Now(), Name: u.login, Value: sMess}
-			dbMessages = append(dbMessages, m)
+			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: u.Login, Message: sMess}
+			_, err := wm.Write(m.Message, m.Name, m.Time)
+			if err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 	if !userFound {
@@ -242,9 +364,9 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getUser(c *http.Cookie) (user, bool) {
+func getUser(c *http.Cookie) (models.User, bool) {
 	// if the user exists already, get user
-	var u user
+	var u models.User
 	if s, ok := dbSessions[c.Value]; ok {
 		u = dbUsers[s.un]
 

@@ -13,3 +13,6 @@ Structures are the same, so the problems. Significanly refactured frontend logic
 # V03
 Added clickhouse microservice realization via grpc. Added zap logger client for this microservice, so all logs now go to clickhouse. 12h
 
+# V04
+Added simple mongodb via grpc. Mongo stores all messages. 2h
+

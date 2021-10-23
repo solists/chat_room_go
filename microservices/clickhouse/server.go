@@ -31,9 +31,6 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot load TLS credentials: ", err)
 	}
-	if err != nil {
-		log.Panicln(err)
-	}
 	server := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(mmw.LogInterceptor, mmw.AuthInterceptor)),
