@@ -14,7 +14,8 @@ import (
 	"net/http"
 	"time"
 
-	grpcconnector "chat_room_go/microservices/mongodb/pb"
+	mongoconnector "chat_room_go/microservices/mongodb/pb"
+	redisconnector "chat_room_go/microservices/redis/pb"
 
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -25,7 +26,8 @@ import (
 
 // TODO: remove race condition
 var tpl *template.Template
-var dbUsers map[string]models.User
+
+//var dbUsers map[string]models.User
 var dbSessions map[string]session
 var dbSessionsCleaned time.Time
 
@@ -33,21 +35,29 @@ const (
 	sessionLength int = 30
 )
 
-//var dbMessages []models.ChatMessage
-var wm mongoDBAdapter
+var wm grpcMongoAdapter
+var wr grpcRedisAdapter
 
 func init() {
 	tpl = template.Must(template.ParseGlob("./views/*.gohtml"))
-	dbUsers = make(map[string]models.User)
 	dbSessions = make(map[string]session)
 	//dbMessages = make([]models.ChatMessage, 0)
+}
 
-	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
-	dbUsers["tyt@tyt"] = models.User{Login: "tyt@tyt", Pass: bs}
-
-	wm = mongoDBAdapter{}
-	wm.DbParms = MongoDBParms{DbName: "test", CollectionName: "messages"}
+// Init grpc to mongo
+func init() {
+	wm = grpcMongoAdapter{}
+	wm.dbParms = dbParms{DbName: "test", CollectionName: "messages"}
+	wm.url = "127.0.0.1:8082"
 	wm.InitMongoAdapter()
+}
+
+// Init grpc to redis
+func init() {
+	wr = grpcRedisAdapter{}
+	wr.dbParms = dbParms{DbName: "test", CollectionName: "users"}
+	wr.url = "127.0.0.1:8083"
+	wr.InitRedisAdapter()
 }
 
 type session struct {
@@ -80,27 +90,51 @@ func main() {
 	slc.Infof("cjcjc")
 	slc.Sync()
 
-	defer wm.GrpcConn.Close()
+	defer wm.grpcConn.Close()
+	defer wr.grpcConn.Close()
+
+	bs, _ := bcrypt.GenerateFromPassword([]byte("123"), bcrypt.MinCost)
+
+	_, err := wr.Write(models.User{Login: "tyt@tyt", Pass: bs})
+	if err != nil {
+		log.Panicln(err)
+	}
+	res, err := wr.Read("ssdfsgsxs")
+	if err != nil {
+		log.Panicln(err)
+	}
+	fmt.Println(res)
 }
 
 // Struct, that implements io.Writer, keeps all data for grpc request TODO: GrpcConn closel ogic move inside
-type mongoDBAdapter struct {
-	writerClient grpcconnector.WriterClient
-	readerClient grpcconnector.ReaderClient
+type grpcMongoAdapter struct {
+	writerClient mongoconnector.WriterClient
+	readerClient mongoconnector.ReaderClient
 	ctx          context.Context
-	GrpcConn     *grpc.ClientConn
-	DbParms      MongoDBParms
+	grpcConn     *grpc.ClientConn
+	dbParms      dbParms
+	url          string
 }
 
-type MongoDBParms struct {
+type dbParms struct {
 	DbName         string
 	CollectionName string
 }
 
-func (w *mongoDBAdapter) Write(message, name, time string) (int, error) {
+// Struct, that implements io.Writer, keeps all data for grpc request TODO: GrpcConn closel ogic move inside
+type grpcRedisAdapter struct {
+	writerClient redisconnector.WriterClient
+	readerClient redisconnector.ReaderClient
+	ctx          context.Context
+	grpcConn     *grpc.ClientConn
+	dbParms      dbParms
+	url          string
+}
+
+func (w *grpcRedisAdapter) Write(u models.User) (int, error) {
 	_, err := w.writerClient.Write(
 		w.ctx,
-		&grpcconnector.WriteRequest{Message: message, Name: name, Time: time},
+		&redisconnector.WriteRequest{Login: u.Login, Fname: u.Fname, Lname: u.Lname, Pass: string(u.Pass), Role: u.Role, LastActive: time.Now().Format("2006-01-02 15:04:05")},
 	)
 	if err != nil {
 		return 0, err
@@ -108,10 +142,66 @@ func (w *mongoDBAdapter) Write(message, name, time string) (int, error) {
 	return 0, nil
 }
 
-func (w *mongoDBAdapter) Read() ([]*grpcconnector.MessageInfo, error) {
+func (w *grpcRedisAdapter) Read(login string) (*models.User, error) {
 	toReturn, err := w.readerClient.Read(
 		w.ctx,
-		&grpcconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 10},
+		&redisconnector.ReadRequest{Login: login},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if toReturn.Result == nil {
+		return nil, nil
+	}
+	r := toReturn.Result
+	return &models.User{r.Login, r.Fname, r.Lname, []byte(r.Pass), r.Role}, nil
+}
+
+// Initializes TLS, grpc mappings, context for logwriter
+func (w *grpcRedisAdapter) InitRedisAdapter() {
+	creds, err := loadTLSCredentials()
+	if err != nil {
+		log.Panicln(err)
+	}
+
+	w.grpcConn, err = grpc.Dial(
+		w.url,
+		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		grpc.WithTransportCredentials(creds),
+	)
+	if err != nil {
+		log.Fatalf("cant connect to grpc")
+	}
+
+	w.writerClient = redisconnector.NewWriterClient(w.grpcConn)
+	w.readerClient = redisconnector.NewReaderClient(w.grpcConn)
+
+	w.ctx = context.Background()
+	md := metadata.Pairs(
+		"api-req-id", "123qwe",
+		"dbname", w.dbParms.DbName,
+		"collectionname", w.dbParms.CollectionName,
+	)
+	sHeader := metadata.Pairs("authorization", "val")
+	grpc.SendHeader(w.ctx, sHeader)
+	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
+}
+
+func (w *grpcMongoAdapter) Write(message, name, time string) (int, error) {
+	_, err := w.writerClient.Write(
+		w.ctx,
+		&mongoconnector.WriteRequest{Message: message, Name: name, Time: time},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+func (w *grpcMongoAdapter) Read() ([]*mongoconnector.MessageInfo, error) {
+	toReturn, err := w.readerClient.Read(
+		w.ctx,
+		&mongoconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 10},
 	)
 	if err != nil {
 		return nil, err
@@ -120,14 +210,14 @@ func (w *mongoDBAdapter) Read() ([]*grpcconnector.MessageInfo, error) {
 }
 
 // Initializes TLS, grpc mappings, context for logwriter
-func (w *mongoDBAdapter) InitMongoAdapter() {
+func (w *grpcMongoAdapter) InitMongoAdapter() {
 	creds, err := loadTLSCredentials()
 	if err != nil {
 		log.Panicln(err)
 	}
 
-	w.GrpcConn, err = grpc.Dial(
-		"127.0.0.1:8082",
+	w.grpcConn, err = grpc.Dial(
+		w.url,
 		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
 		grpc.WithTransportCredentials(creds),
 	)
@@ -135,14 +225,14 @@ func (w *mongoDBAdapter) InitMongoAdapter() {
 		log.Fatalf("cant connect to grpc")
 	}
 
-	w.writerClient = grpcconnector.NewWriterClient(w.GrpcConn)
-	w.readerClient = grpcconnector.NewReaderClient(w.GrpcConn)
+	w.writerClient = mongoconnector.NewWriterClient(w.grpcConn)
+	w.readerClient = mongoconnector.NewReaderClient(w.grpcConn)
 
 	w.ctx = context.Background()
 	md := metadata.Pairs(
 		"api-req-id", "123qwe",
-		"dbname", w.DbParms.DbName,
-		"collectionname", w.DbParms.CollectionName,
+		"dbname", w.dbParms.DbName,
+		"collectionname", w.dbParms.CollectionName,
 	)
 	sHeader := metadata.Pairs("authorization", "val")
 	grpc.SendHeader(w.ctx, sHeader)
@@ -207,7 +297,11 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 		l := r.FormValue("lastname")
 		role := r.FormValue("role")
 		// username taken?
-		if _, ok := dbUsers[un]; ok {
+		res, err := wr.Read(un)
+		if err != nil {
+			log.Panicln(err)
+		}
+		if res != nil {
 			http.Error(w, "Username already taken", http.StatusForbidden)
 			return
 		}
@@ -219,7 +313,10 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		u = models.User{un, f, l, bs, role}
-		dbUsers[un] = u
+		_, err = wr.Write(u)
+		if err != nil {
+			log.Panicln(err)
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -250,7 +347,7 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 	numOfAllMess := len(dbMessages)
-	var lastMessages = make([]*grpcconnector.MessageInfo, 0, 5)
+	var lastMessages = make([]*mongoconnector.MessageInfo, 0, 5)
 	if numOfAllMess < numChatMessages {
 		lastMessages = dbMessages
 	} else {
@@ -276,13 +373,16 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 		un := r.FormValue("username")
 		pswrd := r.FormValue("password")
 		// is there a username?
-		u, ok := dbUsers[un]
-		if !ok {
+		u, err := wr.Read("ss")
+		if err != nil {
+			log.Panicln(err)
+		}
+		if u == nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
 		}
 		// does the entered password match the stored password?
-		err := bcrypt.CompareHashAndPassword(u.Pass, []byte(pswrd))
+		err = bcrypt.CompareHashAndPassword([]byte(u.Pass), []byte(pswrd))
 		if err != nil {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
@@ -368,7 +468,11 @@ func getUser(c *http.Cookie) (models.User, bool) {
 	// if the user exists already, get user
 	var u models.User
 	if s, ok := dbSessions[c.Value]; ok {
-		u = dbUsers[s.un]
+		res, err := wr.Read(s.un)
+		if err != nil {
+			log.Panicln(err)
+		}
+		u = *res
 
 		return u, true
 	}

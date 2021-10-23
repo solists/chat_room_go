@@ -1,3 +1,6 @@
+// Implements Write function
+// Everytime we establish new connection to database. TODO: remove this feature
+
 package main
 
 import (

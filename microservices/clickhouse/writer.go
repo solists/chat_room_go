@@ -1,6 +1,7 @@
 // Implements Write function
 // Write is used by zap logger, as io.Writer
 // Every log goes by grpc to this microservice and comes to clickhouse
+// Every cache write we establish new connection to database. TODO: remove this feature
 
 package main
 

@@ -1,3 +1,5 @@
+// Main service function, listens for requests
+
 package main
 
 import (
@@ -29,7 +31,7 @@ func init() {
 	//wl.DbParms = logs.ClickHouseDBParms{DbName: "logs", TableName: "mongodb_service"}
 	//slc := wl.GetCLickHouseLogger()
 	//slc.Infof("Initilized")
-	logger = logs.InitDirLogger("./logs/mondologs.json")
+	logger = logs.InitDirLogger("./logs/mongologs.json")
 }
 
 func main() {
