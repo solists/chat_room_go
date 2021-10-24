@@ -35,7 +35,7 @@ func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grp
 	toReturn, err := readFromDB(dbName, collectionName, i.Login)
 	if err != nil {
 		logger.Errorf("Error during table reading \"%s\"", err)
-		return &grpcconnector.ReadResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
+		return &grpcconnector.ReadResponse{Status: 500, Desription: "Error during table reading"}, status.Errorf(codes.NotFound, "Error during table reading: %s", err)
 	}
 
 	logger.Info(toReturn)

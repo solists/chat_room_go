@@ -44,6 +44,8 @@ func main() {
 	)
 	grpcconnector.RegisterWriterServer(server, RPCWriter{})
 	grpcconnector.RegisterReaderServer(server, RPCReader{})
+	grpcconnector.RegisterGetterSessionServer(server, RPCReader{})
+	grpcconnector.RegisterWriterSessionServer(server, RPCWriter{})
 
 	lis, err := net.Listen("tcp", ":8083")
 	if err != nil {

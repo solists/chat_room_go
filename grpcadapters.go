@@ -55,12 +55,14 @@ type grpcMongoAdapter struct {
 
 // Struct, that implements grpc methods for redis microservice
 type grpcRedisAdapter struct {
-	writerClient redisconnector.WriterClient
-	readerClient redisconnector.ReaderClient
-	ctx          context.Context
-	grpcConn     *grpc.ClientConn
-	dbParms      dbParms
-	url          string
+	writerClient        redisconnector.WriterClient
+	readerClient        redisconnector.ReaderClient
+	writerSessionClient redisconnector.WriterSessionClient
+	getterSessionClient redisconnector.GetterSessionClient
+	ctx                 context.Context
+	grpcConn            *grpc.ClientConn
+	dbParms             dbParms
+	url                 string
 }
 
 // Writes user to redis
@@ -96,6 +98,31 @@ func (w *grpcRedisAdapter) Read(login string) (*models.User, error) {
 		Role:  r.Role}, nil
 }
 
+// Writes session to redis
+func (w *grpcRedisAdapter) AddSession(sessionId, userName string) (int, error) {
+	_, err := w.writerSessionClient.AddSession(
+		w.ctx,
+		&redisconnector.AddSessionRequest{SessionId: sessionId, UserName: userName},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+// Returns session from redis
+func (w *grpcRedisAdapter) GetSession(sessionId string) (string, error) {
+	toReturn, err := w.getterSessionClient.GetSession(
+		w.ctx,
+		&redisconnector.GetSessionRequest{SessionId: sessionId},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return toReturn.UserName, nil
+}
+
 // Initializes TLS, grpc mappings, context for redis
 func (w *grpcRedisAdapter) initRedisAdapter() {
 	creds, err := loadTLSCredentialsRedis()
@@ -114,6 +141,8 @@ func (w *grpcRedisAdapter) initRedisAdapter() {
 
 	w.writerClient = redisconnector.NewWriterClient(w.grpcConn)
 	w.readerClient = redisconnector.NewReaderClient(w.grpcConn)
+	w.getterSessionClient = redisconnector.NewGetterSessionClient(w.grpcConn)
+	w.writerSessionClient = redisconnector.NewWriterSessionClient(w.grpcConn)
 
 	w.ctx = context.Background()
 	md := metadata.Pairs(
