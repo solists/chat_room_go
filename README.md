@@ -34,3 +34,6 @@ Added simple mongodb microservice via grpc. Mongo stores all messages. 2h
 # V05
 Added simple redis microservice via grpc. Redis stores all users. 2h
 
+# Cleanup
+Refacturing. Added http log, panic recovery, auth middleware. 7h
+
