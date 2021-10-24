@@ -19,7 +19,10 @@ import (
 var tpl *template.Template
 
 const (
+	// Length of session
 	sessionLength int = 30
+	// Number of messages that will be downloaded from server
+	numChatMessages int = 5
 )
 
 func init() {
@@ -36,13 +39,13 @@ func main() {
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("/main", mainHandle)
 	authMux.HandleFunc("/messages", getMessagesHandle)
-	siteHandler := authMiddleware(authMux)
+	siteAuthHandler := authMiddleware(authMux)
 
 	techMux.HandleFunc("/login", loginHandle)
 	techMux.Handle("/views/", http.StripPrefix("/views/", http.FileServer(http.Dir("views"))))
-	techMux.Handle("/main", siteHandler)
+	techMux.Handle("/main", siteAuthHandler)
 	techMux.HandleFunc("/signup", signupHandle)
-	techMux.Handle("/messages", siteHandler)
+	techMux.Handle("/messages", siteAuthHandler)
 	techMux.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
 	techMux.Handle("/favicon.ico", http.NotFoundHandler())
 
@@ -103,13 +106,14 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 	var u models.User
 	if r.Method == http.MethodPost {
 		// get form values
-		un := r.FormValue("username")
-		p := r.FormValue("password")
-		f := r.FormValue("firstname")
-		l := r.FormValue("lastname")
-		role := r.FormValue("role")
+		u, err := getUserFromForm(r)
+		if err != nil {
+			logs.Logger.Error("Error while acquiring user from form: ", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 		// username taken?
-		res, err := RedisAdapter.Read(un)
+		res, err := RedisAdapter.Read(u.Login)
 		if err != nil {
 			logs.Logger.Panic(err)
 		}
@@ -117,22 +121,11 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Username already taken", http.StatusForbidden)
 			return
 		}
-		err = setSessionCookie(w, r, un)
+		err = setSessionCookie(w, r, u.Login)
 		if err != nil {
 			logs.Logger.Panic("Error during session creation", err)
 		}
-		bs, err := bcrypt.GenerateFromPassword([]byte(p), bcrypt.MinCost)
-		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-		u = models.User{
-			Login: un,
-			Fname: f,
-			Lname: l,
-			Pass:  bs,
-			Role:  role}
-		_, err = RedisAdapter.Write(u)
+		_, err = RedisAdapter.Write(*u)
 		if err != nil {
 			logs.Logger.Panic(err)
 		}
@@ -143,6 +136,19 @@ func signupHandle(w http.ResponseWriter, r *http.Request) {
 	tpl.ExecuteTemplate(w, "signup.gohtml", u)
 }
 
+func getUserFromForm(r *http.Request) (*models.User, error) {
+	bs, err := bcrypt.GenerateFromPassword([]byte(r.FormValue("password")), bcrypt.MinCost)
+	if err != nil {
+		return nil, err
+	}
+	return &models.User{
+		Login: r.FormValue("username"),
+		Fname: r.FormValue("firstname"),
+		Lname: r.FormValue("lastname"),
+		Pass:  bs,
+		Role:  r.FormValue("role")}, nil
+}
+
 // Returns messages to front
 func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 	logs.Logger.Info(r)
@@ -150,21 +156,23 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only GET methods allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	numChatMessages := 5
 	dbMessages, err := MongoAdapter.Read()
 	if err != nil {
-		logs.Logger.Info(err)
+		logs.Logger.Error(err)
 	}
+	// We give to front only last 'numChatMessages' messages
 	numOfAllMess := len(dbMessages)
-	var lastMessages = make([]*mongoconnector.MessageInfo, 0, 5)
+	var lastMessages = make([]*mongoconnector.MessageInfo, 0, numChatMessages)
 	if numOfAllMess < numChatMessages {
 		lastMessages = dbMessages
 	} else {
 		lastMessages = dbMessages[numOfAllMess-numChatMessages : numOfAllMess]
 	}
 
+	// Return messages to front as json
 	outputJSON, err := json.Marshal(lastMessages)
 	if err != nil {
+		logs.Logger.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -175,27 +183,18 @@ func getMessagesHandle(w http.ResponseWriter, r *http.Request) {
 // Handles login page
 func loginHandle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		un := r.FormValue("username")
-		pswrd := r.FormValue("password")
-		// is there a username?
-		u, err := RedisAdapter.Read(un)
-		if err != nil {
-			logs.Logger.Panic(err)
-		}
-		if u == nil {
+		// Check login and password
+		user, ok := checkUserInfo(r)
+		if !ok {
 			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
 			return
 		}
-		// does the entered password match the stored password?
-		err = bcrypt.CompareHashAndPassword([]byte(u.Pass), []byte(pswrd))
-		if err != nil {
-			http.Error(w, "Username and/or password do not match", http.StatusForbidden)
-			return
-		}
-		err = setSessionCookie(w, r, un)
+		// Set cookie
+		err := setSessionCookie(w, r, user.Login)
 		if err != nil {
 			logs.Logger.Panic("Error during session creation", err)
 		}
+		// Redirect to main after logging in
 		http.Redirect(w, r, "/main", http.StatusSeeOther)
 		return
 	} else if r.Method == http.MethodGet {
@@ -209,13 +208,31 @@ func loginHandle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Checks if user provided correct login and password, returns corresponding user
+func checkUserInfo(r *http.Request) (*models.User, bool) {
+	un := r.FormValue("username")
+	pswrd := r.FormValue("password")
+	// is there a username?
+	u, isFound := getUser(un)
+	if !isFound {
+		return nil, false
+	}
+	// does the entered password match the stored password?
+	err := bcrypt.CompareHashAndPassword([]byte(u.Pass), []byte(pswrd))
+	if err != nil {
+		return nil, false
+	}
+
+	return u, true
+}
+
 // Handles main page
 func mainHandle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		lout := r.FormValue("logout")
 		if lout == "true" {
 			// delete the session
-			_, isFound := getSessionCookie(w, r)
+			isFound := isLoggedIn(r)
 			if !isFound {
 				// We should not get here without session (middleware should handle), then panic (middleware will handle)
 				logs.Logger.Panic("Session not found")
@@ -232,12 +249,12 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 		}
 
 		sMess := r.PostForm.Get("usermsg")
-		u, isFound := getUser(w, r)
+		sess, isFound := getSession(w, r)
 		if !isFound {
 			logs.Logger.Panic("User not found")
 		}
 		if sMess != "" {
-			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: u.Login, Message: sMess}
+			m := models.ChatMessage{Time: time.Now().Format("2006-01-02 15:04:05"), Name: sess.login, Message: sMess}
 			_, err := MongoAdapter.Write(m.Message, m.Name, m.Time)
 			if err != nil {
 				logs.Logger.Info(err)
@@ -246,28 +263,34 @@ func mainHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	err := tpl.ExecuteTemplate(w, "index.gohtml", nil)
 	if err != nil {
+		logs.Logger.Error(err)
 		http.Error(w, "Error during processing template", http.StatusInternalServerError)
 		logs.Logger.Panic(err)
 	}
 }
 
-// Gets user from cookie
-func getUser(w http.ResponseWriter, r *http.Request) (*models.User, bool) {
+// Gets user info from cookie
+func getUser(login string) (*models.User, bool) {
 	// if the user exists already, get user
-	un, isFound := getUsernameFromSession(w, r)
-	if !isFound {
+	res, err := RedisAdapter.Read(login)
+	if err != nil {
+		logs.Logger.Warn(err)
 		return nil, false
 	}
-	res, err := RedisAdapter.Read(string(*un))
-	if err != nil {
-		logs.Logger.Panic(err)
+	if res == nil {
+		return nil, false
 	}
 
 	return res, true
 }
 
-// Gets cookie "session" as a *string
-func getUsernameFromSession(w http.ResponseWriter, r *http.Request) (*string, bool) {
+type session struct {
+	cookie string
+	login  string
+}
+
+// Gets username from cookie "session" as a *string
+func getSession(w http.ResponseWriter, r *http.Request) (*session, bool) {
 	c, err := r.Cookie("session")
 	if err == http.ErrNoCookie {
 		return nil, false
@@ -283,30 +306,10 @@ func getUsernameFromSession(w http.ResponseWriter, r *http.Request) (*string, bo
 		return nil, false
 	}
 
-	return &record, true
+	return &session{cookie: c.Value, login: record}, true
 }
 
-// Gets cookie "session" as a *string
-func getSessionCookie(w http.ResponseWriter, r *http.Request) (*string, bool) {
-	c, err := r.Cookie("session")
-	if err == http.ErrNoCookie {
-		return nil, false
-	} else if err != nil {
-		logs.Logger.Panic("Error while acquiring cookie")
-	}
-
-	record, err := RedisAdapter.GetSession(c.Value)
-	if err != nil {
-		logs.Logger.Error("Error while retrieving value from cache, getSessionCookie: ", err)
-	}
-	if record == "" {
-		return nil, false
-	}
-
-	return &c.Value, true
-}
-
-// Check if user logged in
+// Check if user logged in, when no need of certain value of cookie
 func isLoggedIn(r *http.Request) bool {
 	c, err := r.Cookie("session")
 	if err == http.ErrNoCookie {
@@ -316,7 +319,7 @@ func isLoggedIn(r *http.Request) bool {
 	}
 	record, err := RedisAdapter.GetSession(c.Value)
 	if err != nil {
-		logs.Logger.Error("Error while retrieving value from cache, isLoggedIn: ", err)
+		logs.Logger.Panic("Error while retrieving value from cache, isLoggedIn: ", err)
 	}
 	if record == "" {
 		return false
@@ -345,32 +348,22 @@ func updateSession(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	_, isFound := getSessionCookie(w, r)
+	isFound := isLoggedIn(r)
 	if !isFound {
-		c = &http.Cookie{
-			Name:   "session",
-			Value:  "",
-			MaxAge: -1,
-		}
-		http.SetCookie(w, c)
-		return err
-	} else if err != nil {
-		return err
+		destroySessionCookie(w, r)
 	}
-	c.MaxAge = int(sessionLength)
+	c.MaxAge = sessionLength
 	http.SetCookie(w, c)
 
 	return nil
 }
 
 // TODO: new grpc method
-func destroySessionCookie(w http.ResponseWriter, r *http.Request) error {
+func destroySessionCookie(w http.ResponseWriter, r *http.Request) {
 	c := &http.Cookie{
 		Name:   "session",
 		Value:  "",
 		MaxAge: -1,
 	}
 	http.SetCookie(w, c)
-
-	return nil
 }
