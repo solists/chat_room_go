@@ -22,17 +22,13 @@ func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grp
 	if !ok {
 		return &grpcconnector.ReadResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
 	}
-	dbNames, ok := md["dbname"]
-	if !ok || len(dbNames) != 1 {
-		return &grpcconnector.ReadResponse{Status: 404, Desription: "dbName is not supplied"}, status.Errorf(codes.NotFound, "dbName is not supplied")
+	expirationTimes, ok := md["expirationtime"]
+	if !ok || len(expirationTimes) != 1 {
+		return &grpcconnector.ReadResponse{Status: 404, Desription: "expirationtime is not supplied"}, status.Errorf(codes.NotFound, "expirationtime is not supplied")
 	}
-	dbName := dbNames[0]
-	collectionNames, ok := md["collectionname"]
-	if !ok || len(collectionNames) != 1 {
-		return &grpcconnector.ReadResponse{Status: 404, Desription: "collection name is not supplied"}, status.Errorf(codes.NotFound, "collection name is not supplied")
-	}
-	collectionName := collectionNames[0]
-	toReturn, err := readFromDB(dbName, collectionName, i.Login)
+	expirationTime := expirationTimes[0]
+
+	toReturn, err := readFromDB(expirationTime, i.Login)
 	if err != nil {
 		logger.Errorf("Error during table reading \"%s\"", err)
 		return &grpcconnector.ReadResponse{Status: 500, Desription: "Error during table reading"}, status.Errorf(codes.NotFound, "Error during table reading: %s", err)
@@ -43,7 +39,7 @@ func (w RPCReader) Read(ctx context.Context, i *grpcconnector.ReadRequest) (*grp
 }
 
 // Reads user info from db, if user not found - empty struct
-func readFromDB(dbName, collectionName, login string) (*grpcconnector.UserInfo, error) {
+func readFromDB(expirationTime, login string) (*grpcconnector.UserInfo, error) {
 	conn := pool.Get()
 	defer conn.Close()
 

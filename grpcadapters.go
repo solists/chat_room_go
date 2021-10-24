@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -34,6 +35,7 @@ func init() {
 func init() {
 	RedisAdapter = grpcRedisAdapter{}
 	RedisAdapter.url = "127.0.0.1:8083"
+	RedisAdapter.recParms = recParms{ExpirationTime: strconv.Itoa(sessionLength)}
 	RedisAdapter.initRedisAdapter()
 }
 
@@ -41,6 +43,11 @@ func init() {
 type dbParms struct {
 	DbName         string
 	CollectionName string
+}
+
+// Db to write parameters
+type recParms struct {
+	ExpirationTime string
 }
 
 // Struct, that implements grpc methods for mongodb microservice
@@ -61,7 +68,7 @@ type grpcRedisAdapter struct {
 	getterSessionClient redisconnector.GetterSessionClient
 	ctx                 context.Context
 	grpcConn            *grpc.ClientConn
-	dbParms             dbParms
+	recParms            recParms
 	url                 string
 }
 
@@ -147,8 +154,7 @@ func (w *grpcRedisAdapter) initRedisAdapter() {
 	w.ctx = context.Background()
 	md := metadata.Pairs(
 		"api-req-id", "123qwe",
-		"dbname", w.dbParms.DbName,
-		"collectionname", w.dbParms.CollectionName,
+		"expirationtime", w.recParms.ExpirationTime,
 	)
 	sHeader := metadata.Pairs("authorization", "val")
 	grpc.SendHeader(w.ctx, sHeader)

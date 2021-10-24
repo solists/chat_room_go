@@ -6,6 +6,7 @@ package main
 import (
 	grpcconnector "chat_room_go/microservices/redis/pb"
 	"context"
+	"strconv"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -35,18 +36,13 @@ func (w RPCWriter) AddSession(ctx context.Context, i *grpcconnector.AddSessionRe
 	if !ok {
 		return &grpcconnector.AddSessionResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
 	}
-	dbNames, ok := md["dbname"]
-	if !ok || len(dbNames) != 1 {
-		return &grpcconnector.AddSessionResponse{Status: 404, Desription: "dbName is not supplied"}, status.Errorf(codes.NotFound, "dbName is not supplied")
+	expirationTimes, ok := md["expirationtime"]
+	if !ok || len(expirationTimes) != 1 {
+		return &grpcconnector.AddSessionResponse{Status: 404, Desription: "expirationtime is not supplied"}, status.Errorf(codes.NotFound, "expirationtime is not supplied")
 	}
-	dbName := dbNames[0]
-	collectionNames, ok := md["collectionname"]
-	if !ok || len(collectionNames) != 1 {
-		return &grpcconnector.AddSessionResponse{Status: 404, Desription: "collection name is not supplied"}, status.Errorf(codes.NotFound, "collection name is not supplied")
-	}
-	collectionName := collectionNames[0]
+	expirationTime := expirationTimes[0]
 
-	err := writeSessionToDB(dbName, collectionName, i)
+	err := writeSessionToDB(expirationTime, i)
 	if err != nil {
 		logger.Errorf("Error during table insertion \"%s\"", err)
 		return &grpcconnector.AddSessionResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
@@ -57,10 +53,14 @@ func (w RPCWriter) AddSession(ctx context.Context, i *grpcconnector.AddSessionRe
 }
 
 // Writes message to redis
-func writeSessionToDB(dbName, collectionName string, i *grpcconnector.AddSessionRequest) error {
+func writeSessionToDB(expirationTime string, i *grpcconnector.AddSessionRequest) error {
+	expTime, err := strconv.Atoi(expirationTime)
+	if err != nil {
+		return err
+	}
 	conn := pool.Get()
 	defer conn.Close()
-	_, err := conn.Do("SET", i.SessionId, i.UserName, "EX", 10)
+	_, err = conn.Do("SET", i.SessionId, i.UserName, "EX", expTime)
 	if err != nil {
 		return err
 	}

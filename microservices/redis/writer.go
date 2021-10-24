@@ -58,18 +58,13 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 	if !ok {
 		return &grpcconnector.WriteResponse{Status: 404, Desription: "Metadata was not found"}, status.Errorf(codes.NotFound, "Metadata was not found")
 	}
-	dbNames, ok := md["dbname"]
-	if !ok || len(dbNames) != 1 {
-		return &grpcconnector.WriteResponse{Status: 404, Desription: "dbName is not supplied"}, status.Errorf(codes.NotFound, "dbName is not supplied")
+	expirationTimes, ok := md["expirationtime"]
+	if !ok || len(expirationTimes) != 1 {
+		return &grpcconnector.WriteResponse{Status: 404, Desription: "expirationtime is not supplied"}, status.Errorf(codes.NotFound, "expirationtime is not supplied")
 	}
-	dbName := dbNames[0]
-	collectionNames, ok := md["collectionname"]
-	if !ok || len(collectionNames) != 1 {
-		return &grpcconnector.WriteResponse{Status: 404, Desription: "collection name is not supplied"}, status.Errorf(codes.NotFound, "collection name is not supplied")
-	}
-	collectionName := collectionNames[0]
+	expirationTime := expirationTimes[0]
 
-	err := writeToDB(dbName, collectionName, i)
+	err := writeToDB(expirationTime, i)
 	if err != nil {
 		logger.Errorf("Error during table insertion \"%s\"", err)
 		return &grpcconnector.WriteResponse{Status: 500, Desription: "Error during table insertion"}, status.Errorf(codes.NotFound, "Error during table insertion: %s", err)
@@ -80,7 +75,7 @@ func (w RPCWriter) Write(ctx context.Context, i *grpcconnector.WriteRequest) (*g
 }
 
 // Writes message to redis
-func writeToDB(dbName, collectionName string, i *grpcconnector.WriteRequest) error {
+func writeToDB(expirationTime string, i *grpcconnector.WriteRequest) error {
 	conn := pool.Get()
 	defer conn.Close()
 	_, err := conn.Do("HSET", redis.Args{}.Add(i.Login).AddFlat(i)...)

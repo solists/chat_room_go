@@ -19,7 +19,7 @@ import (
 var tpl *template.Template
 
 const (
-	sessionLength int32 = 30
+	sessionLength int = 30
 )
 
 func init() {
