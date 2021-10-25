@@ -27,14 +27,14 @@ var RedisAdapter grpcRedisAdapter
 func init() {
 	MongoAdapter = grpcMongoAdapter{}
 	MongoAdapter.dbParms = dbParms{DbName: "test", CollectionName: "messages"}
-	MongoAdapter.url = "127.0.0.1:8082"
+	MongoAdapter.url = "host.docker.internal:8082"
 	MongoAdapter.InitMongoAdapter()
 }
 
 // Init grpc to redis
 func init() {
 	RedisAdapter = grpcRedisAdapter{}
-	RedisAdapter.url = "127.0.0.1:8083"
+	RedisAdapter.url = "host.docker.internal:8083"
 	RedisAdapter.recParms = recParms{ExpirationTime: strconv.Itoa(sessionLength)}
 	RedisAdapter.initRedisAdapter()
 }
@@ -177,7 +177,7 @@ func (w *grpcMongoAdapter) Write(message, name, time string) (int, error) {
 func (w *grpcMongoAdapter) Read() ([]*mongoconnector.MessageInfo, error) {
 	toReturn, err := w.readerClient.Read(
 		w.ctx,
-		&mongoconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 10},
+		&mongoconnector.ReadRequest{Time: time.Now().Format("2006-01-02 15:04:05"), Number: 100},
 	)
 	if err != nil {
 		return nil, err
