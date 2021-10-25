@@ -22,7 +22,7 @@ const (
 	// Length of session
 	sessionLength int = 30
 	// Number of messages that will be downloaded from server
-	numChatMessages int = 5
+	numChatMessages int = 500
 )
 
 func init() {
@@ -30,7 +30,7 @@ func init() {
 }
 
 func main() {
-	defer Cleanup()
+	//defer Cleanup()
 	// Mux for logs and panic recovery
 	techMux := http.NewServeMux()
 	techHandler := panicMiddleware(accessLogMiddleware(techMux))
@@ -49,7 +49,7 @@ func main() {
 	techMux.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
 	techMux.Handle("/favicon.ico", http.NotFoundHandler())
 
-	http.ListenAndServe("localhost:8080", techHandler)
+	http.ListenAndServe(":8080", techHandler)
 
 	logs.Logger.Infof("Started server")
 	logs.Logger.Sync()

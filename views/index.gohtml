@@ -87,15 +87,16 @@
                         var msg = data[i];
                         var msgT = new Date(msg.time)
                         //console.log(msg.message)
-                        if (msgT > lastMessageTime)
-                        {
+                        // Removed because docker may have different time
+                        //if (msgT > lastMessageTime)
+                        //{
                             //console.log(msgT)
                             $('<li/>').text(msg.message).
                                 prepend( $('<small />').text(msgT.getHours() + ':' + msgT.getMinutes() + ':' + msgT.getSeconds() + ' ' + msg.name) ).
                                 appendTo('#messages');
                             $('#messages').data('lastMessageTime', msgT);
                             console.log(lastMessageTime)
-                        }
+                        //}
                     }
                     
                     // Remove all but the last 50 messages in the list to prevent browser slowdown with extremely large lists
