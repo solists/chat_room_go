@@ -89,7 +89,7 @@
                         //console.log(msg.message)
                         if (msgT > lastMessageTime)
                         {
-                            console.log(msgT)
+                            //console.log(msgT)
                             $('<li/>').text(msg.message).
                                 prepend( $('<small />').text(msgT.getHours() + ':' + msgT.getMinutes() + ':' + msgT.getSeconds() + ' ' + msg.name) ).
                                 appendTo('#messages');
@@ -102,6 +102,9 @@
                     // and finally scroll down to the newes message.
                     $('#messages > li').slice(0, -50).remove();
                     $('#messages').scrollTop( $('#messages').get(0).scrollHeight );
+                }, complete: function(xhr, status) {
+                    var rHdr = xhr.getResponseHeader('redirect');
+                    if( rHdr != null ) { window.location = rHdr; return; }
                 }});
             };
             

@@ -160,12 +160,12 @@ func WriteCache() error {
 			v.Log,
 			v.ActionTime,
 		); err != nil {
-			return status.Errorf(codes.Internal, "Error during database insertion \"%s.%s\": ", dbName, tableName, err)
+			return status.Errorf(codes.Internal, "Error during database insertion \"%s.%s\": %s", dbName, tableName, err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return status.Errorf(codes.Internal, "Error during database insertion \"%s.%s\": ", dbName, tableName, err)
+		return status.Errorf(codes.Internal, "Error during database insertion \"%s.%s\": %s", dbName, tableName, err)
 	}
 
 	return nil

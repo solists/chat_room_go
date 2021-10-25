@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -34,6 +35,7 @@ func init() {
 func init() {
 	RedisAdapter = grpcRedisAdapter{}
 	RedisAdapter.url = "127.0.0.1:8083"
+	RedisAdapter.recParms = recParms{ExpirationTime: strconv.Itoa(sessionLength)}
 	RedisAdapter.initRedisAdapter()
 }
 
@@ -41,6 +43,11 @@ func init() {
 type dbParms struct {
 	DbName         string
 	CollectionName string
+}
+
+// Db to write parameters
+type recParms struct {
+	ExpirationTime string
 }
 
 // Struct, that implements grpc methods for mongodb microservice
@@ -55,12 +62,14 @@ type grpcMongoAdapter struct {
 
 // Struct, that implements grpc methods for redis microservice
 type grpcRedisAdapter struct {
-	writerClient redisconnector.WriterClient
-	readerClient redisconnector.ReaderClient
-	ctx          context.Context
-	grpcConn     *grpc.ClientConn
-	dbParms      dbParms
-	url          string
+	writerClient        redisconnector.WriterClient
+	readerClient        redisconnector.ReaderClient
+	writerSessionClient redisconnector.WriterSessionClient
+	getterSessionClient redisconnector.GetterSessionClient
+	ctx                 context.Context
+	grpcConn            *grpc.ClientConn
+	recParms            recParms
+	url                 string
 }
 
 // Writes user to redis
@@ -96,6 +105,31 @@ func (w *grpcRedisAdapter) Read(login string) (*models.User, error) {
 		Role:  r.Role}, nil
 }
 
+// Writes session to redis
+func (w *grpcRedisAdapter) AddSession(sessionId, userName string) (int, error) {
+	_, err := w.writerSessionClient.AddSession(
+		w.ctx,
+		&redisconnector.AddSessionRequest{SessionId: sessionId, UserName: userName},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
+}
+
+// Returns session from redis
+func (w *grpcRedisAdapter) GetSession(sessionId string) (string, error) {
+	toReturn, err := w.getterSessionClient.GetSession(
+		w.ctx,
+		&redisconnector.GetSessionRequest{SessionId: sessionId},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return toReturn.UserName, nil
+}
+
 // Initializes TLS, grpc mappings, context for redis
 func (w *grpcRedisAdapter) initRedisAdapter() {
 	creds, err := loadTLSCredentialsRedis()
@@ -114,12 +148,13 @@ func (w *grpcRedisAdapter) initRedisAdapter() {
 
 	w.writerClient = redisconnector.NewWriterClient(w.grpcConn)
 	w.readerClient = redisconnector.NewReaderClient(w.grpcConn)
+	w.getterSessionClient = redisconnector.NewGetterSessionClient(w.grpcConn)
+	w.writerSessionClient = redisconnector.NewWriterSessionClient(w.grpcConn)
 
 	w.ctx = context.Background()
 	md := metadata.Pairs(
 		"api-req-id", "123qwe",
-		"dbname", w.dbParms.DbName,
-		"collectionname", w.dbParms.CollectionName,
+		"expirationtime", w.recParms.ExpirationTime,
 	)
 	sHeader := metadata.Pairs("authorization", "val")
 	grpc.SendHeader(w.ctx, sHeader)

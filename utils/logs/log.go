@@ -24,11 +24,12 @@ var Logger *zap.SugaredLogger
 var WL WriterToClickHouse
 
 // Init logger
-func Init() {
-	WL = WriterToClickHouse{}
-	WL.InitClickHouseLogger()
-	WL.DbParms = ClickHouseDBParms{DbName: "logs", TableName: "main"}
-	Logger = WL.GetCLickHouseLogger()
+func init() {
+	//WL = WriterToClickHouse{}
+	//WL.InitClickHouseLogger()
+	//WL.DbParms = ClickHouseDBParms{DbName: "logs", TableName: "main"}
+	//Logger = WL.GetCLickHouseLogger()
+	Logger = InitDirLogger("logs/main.json")
 }
 
 // Returns zap logger, which writes to directory
