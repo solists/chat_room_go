@@ -4,9 +4,9 @@
 package main
 
 import (
-	grpcconnector "chat_room_go/microservices/mongodb/pb"
 	"context"
 	"log"
+	grpcconnector "chat_room_go/microservices/mongodb/pb"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"

@@ -140,7 +140,7 @@ func (c *tokenAuth) RequireTransportSecurity() bool {
 // Enables TLS and adds certificates for the client
 func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	// Load certificate of the CA who signed server's certificate
-	pemServerCA, err := ioutil.ReadFile("microservices/clickhouse/certs/ca-cert.pem")
+	pemServerCA, err := ioutil.ReadFile("../microservices/clickhouse/certs/ca-cert.pem")
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	}
 
 	// Load client's certificate and private key
-	clientCert, err := tls.LoadX509KeyPair("microservices/clickhouse/certs/client-cert.pem", "microservices/clickhouse/certs/client-key.pem")
+	clientCert, err := tls.LoadX509KeyPair("../microservices/clickhouse/certs/client-cert.pem", "../microservices/clickhouse/certs/client-key.pem")
 	if err != nil {
 		return nil, err
 	}
