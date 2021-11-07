@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+
+        <title>Main page</title>
+        <meta name="description" content="Chat Application main page" />
+        <link rel="stylesheet" href="/views/style.css" />
+    </head>
+    <body>
+    
+        <div id="wrapper">
+            <div id="menu">
+                <p class="welcome">Welcome</p>
+                <p class="logout"><a id="exit" href="#">Exit Chat</a></p>
+            </div>
+
+            <div id="chatbox">
+                <ul id="messages">
+                </ul>
+            </div>
+
+            <div id="chatcontroller">
+                <input name = "usermsgbox" type="text" id="usermsgbox" />
+            </div>
+        </div>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <script type="text/javascript">
+            // jQuery Document
+            $(document).ready(function () {});
+        </script>
+		<script type="text/javascript">
+			// jQuery Document
+			$(document).ready(function(){
+				//If user wants to end session
+				$("#exit").click(function(){
+					var exit = confirm("Are you sure you want to end the session?");
+					if(exit==true){window.location = '?logout=true';}		
+				});
+			});
+            // Function that sends message to the server
+            $(document).ready(function() {
+                $("#usermsgbox").keypress(function (e) {
+                    if(e.key == "Enter")
+                    {
+                        if ($("#usermsgbox").val() == "" ) return;
+                        $.post("/main", 
+                        {
+                            usermsg: $("#usermsgbox").val()
+                        },
+                            function(data, status, xhr) {
+                                if (status != "success") { alert(status); return; }
+                                var rHdr = xhr.getResponseHeader('redirect');
+                                if( rHdr != null ) { window.location = rHdr; return; }
+                                $('<li class="pending" />').text($("#usermsgbox").val()).prepend($('<small />').text("pending")).appendTo('#messages');
+                                $('#messages').scrollTop( $('#messages').get(0).scrollHeight );
+                                $("#usermsgbox").val('');
+                            }
+                        )
+                    }
+                    });   
+            });
+            // Poll-function that looks for new messages
+            var poll_for_new_messages = function(){
+                $.ajax({url: '/messages', dataType: 'json', ifModified: true, timeout: 2000, success: function(data, status, xhr){
+                    // Session expired
+                    var rHdr = xhr.getResponseHeader('redirect');
+                    if( rHdr != null ) { window.location = rHdr; return; }
+                    // Skip all responses with unmodified data
+                    if (!data || data.length == 0) 
+                    {
+                        return;
+                    }
+                    
+                    // Remove the pending messages from the list (they are replaced by the ones from the server later)
+                    $('#messages > li.pending').remove();
+                    
+                    // Get the last message time of start from 1970
+                    var lastMessageTime = $('#messages').data('lastMessageTime');
+                    if (lastMessageTime == null)
+                        lastMessageTime = new Date('January 01, 1970 00:00:00');
+                    
+                    // Add a list entry for every incomming message, but only if we not already inserted it (hence the check for
+                    // the newer ID than the last inserted message).
+                    for(var i = 0; i < data.length; i++)
+                    {
+                        var msg = data[i];
+                        var msgT = new Date(msg.time)
+                        //console.log(msg.message)
+                        // Removed because docker may have different time
+                        if (msgT > lastMessageTime)
+                        {
+                            //console.log(msgT)
+                            $('<li/>').text(msg.message).
+                                prepend( $('<small />').text(msgT.getHours() + ':' + msgT.getMinutes() + ':' + msgT.getSeconds() + ' ' + msg.name) ).
+                                appendTo('#messages');
+                            $('#messages').data('lastMessageTime', msgT);
+                            console.log(lastMessageTime)
+                        }
+                    }
+                    
+                    // Remove all but the last 50 messages in the list to prevent browser slowdown with extremely large lists
+                    // and finally scroll down to the newes message.
+                    $('#messages > li').slice(0, -50).remove();
+                    $('#messages').scrollTop( $('#messages').get(0).scrollHeight );
+                }, complete: function(xhr, status) {
+                    var rHdr = xhr.getResponseHeader('redirect');
+                    if( rHdr != null ) { window.location = rHdr; return; }
+                }});
+            };
+            
+            // Kick of the poll function and repeat it every two seconds
+            poll_for_new_messages();
+            setInterval(poll_for_new_messages, 2000);
+		</script>
+    </body>
+</html>

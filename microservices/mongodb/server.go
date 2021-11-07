@@ -3,6 +3,7 @@
 package main
 
 import (
+	config "chat_room_go/utils/conf"
 	"chat_room_go/utils/logs"
 	"crypto/tls"
 	"crypto/x509"
@@ -25,7 +26,7 @@ var logger *zap.SugaredLogger
 var wl logs.WriterToClickHouse
 
 func init() {
-	logger = logs.InitDirLogger("./logs/mongologs.json")
+	logger = logs.InitDirLogger(config.Config.MongoAdapter.PathToLogs)
 }
 
 // Listen and serve grpc
@@ -37,6 +38,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("cannot load TLS credentials: ", err)
 	}
+	mmw.TokenAuth = config.Config.MongoAdapter.TokenAuth
 	server := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(mmw.LogInterceptor, mmw.AuthInterceptor)),
@@ -45,13 +47,13 @@ func main() {
 	grpcconnector.RegisterWriterServer(server, RPCWriter{})
 	grpcconnector.RegisterReaderServer(server, RPCReader{})
 
-	lis, err := net.Listen("tcp", ":8082")
+	lis, err := net.Listen("tcp", config.Config.MongoAdapter.IntURL)
 	if err != nil {
 		log.Fatalln("cant listen port", err)
 	}
 	defer lis.Close()
 
-	fmt.Println("starting server at :8082")
+	fmt.Println("starting server at ", config.Config.MongoAdapter.IntURL)
 	logger.Debugf("Recieved request")
 	server.Serve(lis)
 }

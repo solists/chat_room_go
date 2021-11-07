@@ -15,6 +15,8 @@ import (
 
 	grpcconnector "chat_room_go/microservices/redis/pb"
 
+	config "chat_room_go/utils/conf"
+
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -25,7 +27,7 @@ var logger *zap.SugaredLogger
 var wl logs.WriterToClickHouse
 
 func init() {
-	logger = logs.InitDirLogger("./logs/redislogs.json")
+	logger = logs.InitDirLogger(config.Config.RedisAdapter.PathToLogs)
 }
 
 // Listen and serve grpc
@@ -37,6 +39,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("cannot load TLS credentials: ", err)
 	}
+	mmw.TokenAuth = config.Config.RedisAdapter.TokenAuth
 	server := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(mmw.LogInterceptor, mmw.AuthInterceptor)),
@@ -47,13 +50,13 @@ func main() {
 	grpcconnector.RegisterGetterSessionServer(server, RPCReader{})
 	grpcconnector.RegisterWriterSessionServer(server, RPCWriter{})
 
-	lis, err := net.Listen("tcp", ":8083")
+	lis, err := net.Listen("tcp", config.Config.RedisAdapter.IntURL)
 	if err != nil {
 		log.Fatalln("cant listen port", err)
 	}
 	defer lis.Close()
 
-	fmt.Println("starting server at :8083")
+	fmt.Println("starting server at ", config.Config.RedisAdapter.IntURL)
 	logger.Debugf("Recieved request")
 	server.Serve(lis)
 }

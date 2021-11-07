@@ -5,6 +5,7 @@ package logs
 
 import (
 	grpcconnector "chat_room_go/microservices/clickhouse/pb"
+	config "chat_room_go/utils/conf"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -27,7 +28,7 @@ var WL WriterToClickHouse
 func init() {
 	//WL = WriterToClickHouse{}
 	//WL.InitClickHouseLogger()
-	//WL.DbParms = ClickHouseDBParms{DbName: "logs", TableName: "main"}
+	//WL.DbParms = ClickHouseDBParms{DbName: config.Config.ClickhouseAdapter.DbName, TableName: config.Config.ClickhouseAdapter.TableName}
 	//Logger = WL.GetCLickHouseLogger()
 	Logger = InitDirLogger("logs/main.json")
 }
@@ -99,8 +100,8 @@ func (w *WriterToClickHouse) InitClickHouseLogger() {
 	}
 
 	w.GrpcConn, err = grpc.Dial(
-		"127.0.0.1:8081",
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		config.Config.ClickhouseAdapter.URL,
+		grpc.WithPerRPCCredentials(&tokenAuth{config.Config.ClickhouseAdapter.TokenAuth}),
 		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
@@ -111,7 +112,6 @@ func (w *WriterToClickHouse) InitClickHouseLogger() {
 
 	w.ctx = context.Background()
 	md := metadata.Pairs(
-		"api-req-id", "123qwe",
 		"dbName", w.DbParms.DbName,
 		"tableName", w.DbParms.TableName,
 	)
@@ -140,7 +140,7 @@ func (c *tokenAuth) RequireTransportSecurity() bool {
 // Enables TLS and adds certificates for the client
 func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	// Load certificate of the CA who signed server's certificate
-	pemServerCA, err := ioutil.ReadFile("microservices/clickhouse/certs/ca-cert.pem")
+	pemServerCA, err := ioutil.ReadFile("../microservices/clickhouse/certs/ca-cert.pem")
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func loadTLSCredentials() (credentials.TransportCredentials, error) {
 	}
 
 	// Load client's certificate and private key
-	clientCert, err := tls.LoadX509KeyPair("microservices/clickhouse/certs/client-cert.pem", "microservices/clickhouse/certs/client-key.pem")
+	clientCert, err := tls.LoadX509KeyPair("../microservices/clickhouse/certs/client-cert.pem", "../microservices/clickhouse/certs/client-key.pem")
 	if err != nil {
 		return nil, err
 	}

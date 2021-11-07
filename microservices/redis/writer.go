@@ -5,6 +5,7 @@ package main
 
 import (
 	grpcconnector "chat_room_go/microservices/redis/pb"
+	config "chat_room_go/utils/conf"
 	"context"
 	"time"
 
@@ -14,10 +15,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	dbURL string = "localhost:6379"
-	//cacheSize int    = 20
-)
+var dbURL string = config.Config.RedisAdapter.DbURL
+
+//cacheSize int    = 20
 
 // TODO: Add chache
 //type cache struct {

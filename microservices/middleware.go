@@ -2,6 +2,7 @@
 package micromiddleware
 
 import (
+	config "chat_room_go/utils/conf"
 	"chat_room_go/utils/logs"
 	"context"
 	"fmt"
@@ -18,8 +19,10 @@ import (
 var logger *zap.SugaredLogger
 
 func init() {
-	logger = logs.InitDirLogger("./logs/microMiddleware.json")
+	logger = logs.InitDirLogger(config.Config.MicroserviceMiddleware.PathToLogs)
 }
+
+var TokenAuth string
 
 // Logs any incoming/outcoming request
 func LogInterceptor(
@@ -89,7 +92,7 @@ func authorize(ctx context.Context) error {
 
 // Validates the token
 func validateToken(token string) error {
-	if token != "sometoken" {
+	if token != TokenAuth {
 		return status.Errorf(codes.Unauthenticated, "Wrong token")
 	}
 	return nil
