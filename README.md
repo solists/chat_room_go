@@ -8,12 +8,13 @@
  - add tests
  - create custom errors
  - add persist db config for dockered databases
- - https, let` encrypt, use tls not only in grpc
+ - https, let`s encrypt, use tls not only in grpc
  - websockets, pool of workers
  - documentation
  - monitoring by timer
  - more panic recovery
  - less databases, no grpc
+ - another module structure, several repos or one common module
 
  # Installation
  - Run all .sh files inside db directory, it will run all databases, that app needs, redis and mongo
