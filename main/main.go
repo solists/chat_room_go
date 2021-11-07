@@ -4,6 +4,7 @@ package main
 
 import (
 	"chat_room_go/main/models"
+	config "chat_room_go/utils/conf"
 	"chat_room_go/utils/logs"
 	"encoding/json"
 	"html/template"
@@ -18,12 +19,11 @@ import (
 
 var tpl *template.Template
 
-const (
-	// Length of session
-	sessionLength int = 30
-	// Number of messages that will be downloaded from server
-	numChatMessages int = 500
-)
+// Length of session
+var sessionLength int = config.Config.SessionExpirationTime
+
+// Number of messages that will be downloaded from server
+var numChatMessages int = config.Config.NumChatMessages
 
 func init() {
 	tpl = template.Must(template.ParseGlob("./views/*.gohtml"))
@@ -49,7 +49,7 @@ func main() {
 	techMux.Handle("/", http.RedirectHandler("/main", http.StatusSeeOther))
 	techMux.Handle("/favicon.ico", http.NotFoundHandler())
 
-	http.ListenAndServe(":8080", techHandler)
+	http.ListenAndServe(config.Config.ChatServeURL, techHandler)
 
 	logs.Logger.Infof("Started server")
 	logs.Logger.Sync()

@@ -5,12 +5,13 @@ import (
 	"chat_room_go/main/models"
 	mongoconnector "chat_room_go/microservices/mongodb/pb"
 	redisconnector "chat_room_go/microservices/redis/pb"
+	config "chat_room_go/utils/conf"
+	"chat_room_go/utils/logs"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"strconv"
 	"time"
 
@@ -26,15 +27,15 @@ var RedisAdapter grpcRedisAdapter
 // Init grpc to mongo
 func init() {
 	MongoAdapter = grpcMongoAdapter{}
-	MongoAdapter.dbParms = dbParms{DbName: "test", CollectionName: "messages"}
-	MongoAdapter.url = ":8082"
+	MongoAdapter.dbParms = dbParms{DbName: config.Config.MongoAdapter.DbName, CollectionName: config.Config.MongoAdapter.CollectionName}
+	MongoAdapter.url = config.Config.MongoAdapter.URL
 	MongoAdapter.InitMongoAdapter()
 }
 
 // Init grpc to redis
 func init() {
 	RedisAdapter = grpcRedisAdapter{}
-	RedisAdapter.url = ":8083"
+	RedisAdapter.url = config.Config.RedisAdapter.URL
 	RedisAdapter.recParms = recParms{ExpirationTime: strconv.Itoa(sessionLength)}
 	RedisAdapter.initRedisAdapter()
 }
@@ -134,16 +135,16 @@ func (w *grpcRedisAdapter) GetSession(sessionId string) (string, error) {
 func (w *grpcRedisAdapter) initRedisAdapter() {
 	creds, err := loadTLSCredentialsRedis()
 	if err != nil {
-		log.Panicln(err)
+		logs.Logger.Panic(err)
 	}
 
 	w.grpcConn, err = grpc.Dial(
 		w.url,
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		grpc.WithPerRPCCredentials(&tokenAuth{config.Config.RedisAdapter.TokenAuth}),
 		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
-		log.Fatalf("cant connect to grpc")
+		logs.Logger.Panic("cant connect to grpc")
 	}
 
 	w.writerClient = redisconnector.NewWriterClient(w.grpcConn)
@@ -156,7 +157,7 @@ func (w *grpcRedisAdapter) initRedisAdapter() {
 		"api-req-id", "123qwe",
 		"expirationtime", w.recParms.ExpirationTime,
 	)
-	sHeader := metadata.Pairs("authorization", "val")
+	sHeader := metadata.Pairs("authorization", config.Config.RedisAdapter.TokenAuth)
 	grpc.SendHeader(w.ctx, sHeader)
 	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
 }
@@ -189,16 +190,16 @@ func (w *grpcMongoAdapter) Read() ([]*mongoconnector.MessageInfo, error) {
 func (w *grpcMongoAdapter) InitMongoAdapter() {
 	creds, err := loadTLSCredentialsMongo()
 	if err != nil {
-		log.Panicln(err)
+		logs.Logger.Panic(err)
 	}
 
 	w.grpcConn, err = grpc.Dial(
 		w.url,
-		grpc.WithPerRPCCredentials(&tokenAuth{"sometoken"}),
+		grpc.WithPerRPCCredentials(&tokenAuth{config.Config.MongoAdapter.TokenAuth}),
 		grpc.WithTransportCredentials(creds),
 	)
 	if err != nil {
-		log.Fatalf("cant connect to grpc")
+		logs.Logger.Panic("cant connect to grpc")
 	}
 
 	w.writerClient = mongoconnector.NewWriterClient(w.grpcConn)
@@ -210,7 +211,7 @@ func (w *grpcMongoAdapter) InitMongoAdapter() {
 		"dbname", w.dbParms.DbName,
 		"collectionname", w.dbParms.CollectionName,
 	)
-	sHeader := metadata.Pairs("authorization", "val")
+	sHeader := metadata.Pairs("authorization", config.Config.MongoAdapter.TokenAuth)
 	grpc.SendHeader(w.ctx, sHeader)
 	w.ctx = metadata.NewOutgoingContext(w.ctx, md)
 }

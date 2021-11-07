@@ -39,6 +39,6 @@ Added simple mongodb microservice via grpc. Mongo stores all messages.
 ## V05
 Added simple redis microservice via grpc. Redis stores all users.
 
-# Cleanup
+## Cleanup
 Refacturing. Added http log, panic recovery, auth middleware. Prepared for delivery, added dockerfiles and scripts.
 

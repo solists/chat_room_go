@@ -3,6 +3,7 @@ package main
 
 import (
 	grpcconnector "chat_room_go/microservices/clickhouse/pb"
+	config "chat_room_go/utils/conf"
 	"chat_room_go/utils/logs"
 	"crypto/tls"
 	"crypto/x509"
@@ -22,7 +23,7 @@ import (
 var logger *zap.SugaredLogger
 
 func init() {
-	logger = logs.InitDirLogger("./logs/clickhouseWriter.json")
+	logger = logs.InitDirLogger(config.Config.ClickhouseAdapter.PathToLogs)
 }
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot load TLS credentials: ", err)
 	}
+	mmw.TokenAuth = config.Config.ClickhouseAdapter.TokenAuth
 	server := grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(mmw.LogInterceptor, mmw.AuthInterceptor)),
@@ -38,7 +40,7 @@ func main() {
 	)
 	grpcconnector.RegisterWriterServer(server, RPCWriter{})
 
-	lis, err := net.Listen("tcp", ":8081")
+	lis, err := net.Listen("tcp", config.Config.ClickhouseAdapter.IntURL)
 	if err != nil {
 		log.Fatalln("cant listen port", err)
 	}
@@ -50,7 +52,7 @@ func main() {
 		}
 	}()
 
-	fmt.Println("starting server at :8081")
+	fmt.Println("starting server at ", config.Config.ClickhouseAdapter.IntURL)
 	logger.Debugf("Recieved request",
 		"method", "hello",
 	)

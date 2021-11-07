@@ -12,6 +12,7 @@ import (
 	"time"
 
 	grpcconnector "chat_room_go/microservices/clickhouse/pb"
+	config "chat_room_go/utils/conf"
 
 	"github.com/ClickHouse/clickhouse-go"
 	"github.com/jmoiron/sqlx"
@@ -20,10 +21,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	dbURL     string = "tcp://127.0.0.1:19000?debug=true"
-	cacheSize int    = 20
-)
+var dbURL string = config.Config.ClickhouseAdapter.DbName
+
+const cacheSize int = 20
 
 // Stores values which will be written to database
 type item struct {

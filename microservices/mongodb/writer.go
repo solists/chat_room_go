@@ -5,6 +5,7 @@ package main
 
 import (
 	grpcconnector "chat_room_go/microservices/mongodb/pb"
+	config "chat_room_go/utils/conf"
 	"context"
 	"time"
 
@@ -17,10 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	dbURL string = "mongodb://127.0.0.1:27017"
-	//cacheSize int    = 20
-)
+var dbURL string = config.Config.MongoAdapter.DbURL
+
+//cacheSize int    = 20
 
 // TODO: Add chache
 //type cache struct {
